@@ -1,3 +1,12 @@
+// Registracija PWA Service Workerja
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('PWA Service Worker uspešno registriran!', reg.scope))
+            .catch(err => console.log('Registracija Service Workerja spodletela:', err));
+    });
+}
+
 let musicians = JSON.parse(localStorage.getItem('baroque_archive_v7')) || zacetniPodatkiSkladateljev;
 let currentMusicianId = null;
 let editingEventId = null;
@@ -13,17 +22,17 @@ window.onload = function() {
     updateLocationLists();
     updateLinkDropdowns();
 
-// Zapri spustni meni, če uporabnik klikne kamorkoli drugam na zaslonu
-window.addEventListener('click', function(e) {
-    const dropdown = document.getElementById('profile-dropdown');
-    const settingsBtn = document.getElementById('profile-settings-btn');
-    if (dropdown && dropdown.classList.contains('prikazi-meni')) {
-        if (e.target !== settingsBtn && !settingsBtn.contains(e.target)) {
-            dropdown.classList.remove('prikazi-meni');
+    // Zapri spustni meni, če uporabnik klikne kamorkoli drugam na zaslonu
+    window.addEventListener('click', function(e) {
+        const dropdown = document.getElementById('profile-dropdown');
+        const settingsBtn = document.getElementById('profile-settings-btn');
+        if (dropdown && !dropdown.classList.contains('hidden')) {
+            if (e.target !== settingsBtn && !settingsBtn.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
         }
-    }
-});
-}
+    });
+};
 
 function generateId(name) { 
     return name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'); 
@@ -202,12 +211,10 @@ async function extractEventsWithGemini() {
 
     const existingLocs = getAllExistingLocations();
 
-    // Izboljšan in strožji prompt za Gemini AI
     const prompt = `Danes deluješ kot strokovni zgodovinski asistent za ekstrakcijo podatkov. 
 Iz naslednjega zgodovinskega besedila izlušči dogodke in dela ter jih vrni v strogi JSON strukturi.
 
 ZAHTEVANA PRAVILA:
-// Popravek pravila 1 v promptu za Gemini:
 1. JEZIK: Vsi opisi dogodkov morajo biti VEDNO v slovenščini, tudi če je izvorno besedilo v angleščini, nemščini ali katerem koli drugem jeziku. Prevedi smiselno, strokovno in jedrnato (npr. namesto dolgega stavka zapiši "Selitev v London in prevzem vloge dvornega skladatelja" ali "Premiera opere Rinaldo").
 2. LOKACIJA (KRAJ): Aktivno poišči geografska mesta, države ali lokacije, povezane z dogodkom (npr. če piše "selitev v Hamburg", je lokacija "Hamburg"; če piše "študij v Gradcu", je lokacija "Gradec"). Lokacije zapisuj v slovenskem imenovalniku (npr. "Hamburg", "Gradec", "London", "Dunaj"). Če je mogoče, uporabi uveljavljena slovenska imena (npr. Vienna -> Dunaj).
 3. OBSTOJEČI KRAJI: Če najdeš ujemanje z obstoječimi kraji v moji bazi, uporabi točno to ime: ${JSON.stringify(existingLocs)}. Če lokacije kljub trudu ni mogoče zaznati, vrni prazen niz "".
@@ -234,8 +241,6 @@ ${text}`;
         }
 
         let aiTextResponse = data.candidates[0].content.parts[0].text.trim();
-        
-        // Očiščenje morebitnih ostankov markdown oznak za vsak slučaj
         aiTextResponse = aiTextResponse.replace(/^```json/i, "").replace(/```$/, "").trim();
         
         const parsedEvents = JSON.parse(aiTextResponse);
@@ -323,7 +328,6 @@ function searchMusicians() {
     const query = document.getElementById('search-input').value.trim().toLowerCase();
     const listEl = document.getElementById('musician-list');
     
-    // Če je iskalno polje prazno, enostavno osvežimo privzet seznam skladateljev na levi
     if (query === "") {
         listEl.innerHTML = '';
         [...musicians].sort((a, b) => a.name.localeCompare(b.name, 'sl')).forEach(m => {
@@ -341,16 +345,10 @@ function searchMusicians() {
 
     const searchYear = parseYear(query);
 
-    // ==========================================================================
-    // NAČIN 1: UPORABNIK IŠČE SPECIFIČNO LETO (npr. 1715)
-    // ==========================================================================
     if (searchYear && !isNaN(searchYear) && query.match(/^\d+$/)) {
-        
-        // Skrijemo začetno okno in obrazce
         document.getElementById('placeholder-text').classList.add('hidden');
         document.getElementById('add-musician-form').classList.add('hidden');
         
-        // Pripravimo elemente glavnega okna za prikaz kronologije leta
         const detailsView = document.getElementById('details-view');
         const nameEl = document.getElementById('view-name');
         const datesEl = document.getElementById('view-dates');
@@ -360,18 +358,15 @@ function searchMusicians() {
         const addEventBtn = document.getElementById('add-event-btn');
         const avatarContainer = document.getElementById('view-avatar-container');
         
-        // Skrijemo gumbe, ki so specifični samo za profil posameznika
         document.getElementById('profile-settings-container').classList.add('hidden');
         addEventBtn.classList.add('hidden');
         avatarContainer.innerHTML = "";
         summaryEl.innerHTML = "";
 
-        // Nastavimo naslove
         nameEl.textContent = `Leto ${searchYear}`;
         datesEl.textContent = `Pregled vseh zgodovinskih dogodkov in del v tem letu`;
         titleEl.textContent = "Zabeleženi dogodki";
 
-        // Zberemo vse dogodke iz celotne baze, ki se ujemajo s tem letom
         let allYearEvents = [];
         musicians.forEach(m => {
             if (m.events) {
@@ -388,10 +383,8 @@ function searchMusicians() {
             }
         });
 
-        // Sortiramo dogodke (po kraju, da je bolj urejeno, če jih je več)
         allYearEvents.sort((a, b) => (a.event.location || "").localeCompare(b.event.location || "", 'sl'));
 
-        // Izris v časovnico
         timelineEl.innerHTML = '';
         if (allYearEvents.length === 0) {
             timelineEl.innerHTML = `<p style="font-style:italic; color: var(--text-muted);">V letu ${searchYear} v arhivu ni zabeleženih specifičnih dogodkov.</p>`;
@@ -426,13 +419,9 @@ function searchMusicians() {
         detailsView.classList.remove('hidden');
         document.getElementById('back-btn').style.display = 'inline-block';
 
-        // Mobilni preklop: skrij seznam in prikaži kronologijo leta
         document.getElementById('sidebar').classList.add('mobilno-skrij');
         document.getElementById('main-content').classList.add('mobilno-prikaži');
 
-    // ==========================================================================
-    // NAČIN 2: UPORABNIK IŠČE IME SKLADATELJA (KLASIČNO ISKANJE)
-    // ==========================================================================
     } else {
         listEl.innerHTML = '';
         let filtered = musicians.filter(m => m.name.toLowerCase().includes(query));
@@ -474,7 +463,6 @@ function filterByLocation(targetLoc) {
     const addEventBtn = document.getElementById('add-event-btn');
     const avatarContainer = document.getElementById('view-avatar-container');
     
-    // Skrij gumb za nastavitve profila, ko gledamo celotno lokacijo
     document.getElementById('profile-settings-container').classList.add('hidden');
 
     nameEl.textContent = targetLoc;
@@ -520,8 +508,6 @@ function filterByLocation(targetLoc) {
                 }
             }
 
-            // Izris popolnoma enak tistemu pri iskanju po letih:
-            // Ime skladatelja je zgoraj kot glava, tekst spodaj pa je čist in ločen.
             div.innerHTML = `
                 <div class="timeline-header">
                     <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${item.musicianName}</span>
@@ -537,7 +523,6 @@ function filterByLocation(targetLoc) {
     detailsView.classList.remove('hidden');
     document.getElementById('back-btn').style.display = 'inline-block';
 
-    // Mobilni preklop
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
 }
@@ -590,7 +575,6 @@ function showMusicianDetails(id) {
     document.getElementById('add-musician-form').classList.add('hidden');
     document.getElementById('add-event-btn').classList.remove('hidden');
     
-    // Prikaži gumb za nastavitve profila, ko gledamo specifičnega skladatelja
     document.getElementById('profile-settings-container').classList.remove('hidden');
     document.getElementById('profile-dropdown').classList.remove('prikazi-meni');
     
@@ -611,136 +595,208 @@ function showMusicianDetails(id) {
         avatarContainer.innerHTML = `<div class="avatar-circle avatar-large"><span class="avatar-placeholder" style="font-size: 2rem;">🎻</span></div>`;
     }
 
-    // Izris besedilne časovnice
     renderTimeline(m);
-    
-    // DINAMIČNI IZRIS DIAGRAMA POTI (SVG)
-    renderJourneyDiagram(m);
     
     document.getElementById('details-view').classList.remove('hidden');
     document.getElementById('back-btn').style.display = 'inline-block';
 
-    // Mobilni preklop: skrij seznam in prikaži kronologijo
+    // KLJUČNI POPRAVEK: TUKAJ POKLIČEMO IZRIS ZEMLJEVIDA (ko je kontejner že viden)
+    renderJourneyDiagram(m);
+
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
 }
 
+// Globalna spremenljivka za Leaflet
+let mapInstance = null;
+
+// Slovar geografskih koordinat
+const GEO_COORDINATES = {
+    "Ljubljana": [46.0569, 14.5058],
+    "Graz": [47.0707, 15.4395],
+    "Gradec": [47.0707, 15.4395],
+    "Vienna": [48.2082, 16.3738],
+    "Dunaj": [48.2082, 16.3738],
+    "Salzburg": [47.8095, 13.0550],
+    "Venice": [45.4408, 12.3155],
+    "Benetke": [45.4408, 12.3155],
+    "Rome": [41.9028, 12.4964],
+    "Rim": [41.9028, 12.4964],
+    "London": [51.5074, -0.1278],
+    "Paris": [48.8566, 2.3522],
+    "Pariz": [48.8566, 2.3522],
+    "Leipzig": [51.3397, 12.3731],
+    "Dresden": [51.0504, 13.7373],
+    "Hamburg": [53.5511, 9.9937],
+    "Prague": [50.0755, 14.4378],
+    "Praga": [50.0755, 14.4378]
+};
+
 function renderJourneyDiagram(musician) {
-    const svg = document.getElementById('journey-svg');
-    if (!svg) return;
+    const mapContainer = document.getElementById('journey-map');
+    if (!mapContainer) return;
 
-    // Najprej počistimo prejšnji diagram
-    svg.innerHTML = '';
+    if (mapInstance) {
+        mapInstance.remove();
+        mapInstance = null;
+    }
 
-    // 1. Poiščemo vse kronološke dogodke, ki imajo vpisano lokacijo
     if (!musician.events || musician.events.length === 0) {
-        svg.innerHTML = `<text x="20" y="90" fill="var(--text-muted)" font-size="13">Ni podatkov o lokacijah za ta profil.</text>`;
+        mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">Ni podatkov o dogodkih za zemljevid.</div>`;
         return;
     }
 
-    // Izluščimo kraje po kronološkem vrstnem redu dogodkov
-    const chronologicalPlaces = musician.events
-        .filter(ev => ev.location && ev.location.trim() !== '')
-        .map(ev => ev.location.trim());
+    // 1. Sortiramo dogodke kronološko
+    const sortedEvents = [...musician.events].sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
 
-    if (chronologicalPlaces.length === 0) {
-        svg.innerHTML = `<text x="20" y="90" fill="var(--text-muted)" font-size="13">V kronologiji ni vpisanih krajev.</text>`;
+    // 2. Pametno združevanje zaporednih enakih krajev v potovalne "postaje"
+    const travelStations = [];
+    sortedEvents.forEach(ev => {
+        if (!ev.location || ev.location.trim() === '') return;
+        
+        const locName = ev.location.trim();
+        if (!GEO_COORDINATES[locName]) return; 
+
+        const lastStation = travelStations[travelStations.length - 1];
+
+        if (lastStation && lastStation.name === locName) {
+            lastStation.endYear = ev.year;
+            lastStation.eventTexts.push(`${ev.year}: ${ev.text}`);
+        } else {
+            travelStations.push({
+                name: locName,
+                coords: GEO_COORDINATES[locName],
+                startYear: ev.year,
+                endYear: ev.year,
+                eventTexts: [`${ev.year}: ${ev.text}`]
+            });
+        }
+    });
+
+    if (travelStations.length === 0) {
+        mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">V kronologiji ni vpisanih znanih krajev za prikaz na zemljevidu.</div>`;
         return;
     }
 
-    // Ustvarimo seznam unikatnih krajev (da se vsako mesto izriše le enkrat kot fiksna pika)
-    const uniquePlaces = [...new Set(chronologicalPlaces)];
+    // 3. Izris zemljevida po kratkem zamiku
+    setTimeout(() => {
+        try {
+            // Inicializacija zemljevida s pogledom na celo Evropo (zoom 4 ali 5)
+            mapInstance = L.map('journey-map').setView(travelStations[0].coords, 4);
 
-    // Nastavitve dimenzij znotraj SVG
-    const paddingX = 60;
-    const centerY = 110; // Višina, kjer bodo stale pike mest
-    const svgWidth = svg.clientWidth || svg.getBoundingClientRect().width || 600;
-    
-    // Izračun razmaka med mesti, da se lepo razporedijo glede na širino zaslona
-    const stepX = uniquePlaces.length > 1 ? (svgWidth - paddingX * 2) / (uniquePlaces.length - 1) : 0;
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            }).addTo(mapInstance);
 
-    // Slovar, v katerega si shranimo X koordinato za vsako mesto
-    const coords = {};
-    uniquePlaces.forEach((place, index) => {
-        coords[place] = paddingX + (index * stepX);
-    });
+            const latlngs = [];
+            
+            // Slovar, ki nam pove, kolikokrat se je določen kraj že pojavil v celotni poti
+            const locationCounts = {};
+            travelStations.forEach(s => {
+                locationCounts[s.name] = (locationCounts[s.name] || 0) + 1;
+            });
 
-    // --- 2. IZRIS POVEZAV (LOKOV POTRETOVANJA) ---
-    // Definicija puščice na koncu linije (marker)
-    svg.innerHTML += `
-        <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--amber)" />
-            </marker>
-        </defs>
-    `;
+            // Tekoči števec ponovitev za zamike med izrisom
+            const currentIteration = {};
 
-    // Sprehodimo se skozi zaporedna potovanja (Ljubljana -> Graz, Graz -> Dunaj...)
-    for (let i = 0; i < chronologicalPlaces.length - 1; i++) {
-        const from = chronologicalPlaces[i];
-        const to = chronologicalPlaces[i + 1];
+            travelStations.forEach((station, index) => {
+                const orderNumber = index + 1;
+                currentIteration[station.name] = (currentIteration[station.name] || 0) + 1;
 
-        // Če gre za isto mesto zapored (npr. Ljubljana -> Ljubljana), ne rišemo loka
-        if (from === to) continue;
+                let finalCoords = [...station.coords];
+                const totalRepeats = locationCounts[station.name];
 
-        const x1 = coords[from];
-        const x2 = coords[to];
-        
-        // Izračun loka: večja kot je razdalja med mestoma, višji bo lok (izgleda bolj dinamično)
-        const distance = Math.abs(x2 - x1);
-        const arcHeight = Math.min(60, distance * 0.4); 
-        
-        // Določimo, ali gre pot v desno ali nazaj v levo (da se loki ne prekrivajo čisto natančno)
-        const sweepFlag = x2 > x1 ? 1 : 0;
-        
-        // SVG krivulja (A - Arc)
-        const pathData = `M ${x1} ${centerY} A ${distance/2} ${arcHeight} 0 0 ${sweepFlag} ${x2} ${centerY}`;
+                // NOVO / IZBOLJŠANO: Če se kraj v celotni poti ponovi več kot enkrat, 
+                // markerje razporedimo v popoln krog (Spiderfy) okoli dejanskega centra mesta,
+                // da se vidijo na daleč brez približevanja!
+                if (totalRepeats > 1) {
+                    const currentIdx = currentIteration[station.name] - 1;
+                    const angle = (currentIdx / totalRepeats) * 2 * Math.PI; // Kot v radianih
+                    
+                    // Polmer razmika (povečaj 0.15, če želiš še več razmika na daleč)
+                    const radius = 0.14; 
+                    
+                    finalCoords[0] += Math.sin(angle) * radius; // Lat zamik
+                    finalCoords[1] += Math.cos(angle) * radius; // Lng zamik
+                }
 
-        svg.innerHTML += `
-            <path d="${pathData}" 
-                  fill="none" 
-                  stroke="var(--amber)" 
-                  stroke-width="2" 
-                  opacity="0.4" 
-                  marker-end="url(#arrow)"
-                  style="transition: all 0.3s ease;"
-                  onmouseover="this.setAttribute('opacity', '1'); this.setAttribute('stroke-width', '3');"
-                  onmouseout="this.setAttribute('opacity', '0.4'); this.setAttribute('stroke-width', '2');"
-            />
-        `;
-    }
+                latlngs.push(finalCoords);
 
-    // --- 3. IZRIS TOČK (MEST) IN BESEDILA ---
-    uniquePlaces.forEach((place) => {
-        const x = coords[place];
+                const yearsDisplay = (station.startYear === station.endYear || !station.endYear) 
+                    ? station.startYear 
+                    : `${station.startYear}–${station.endYear}`;
 
-        // Izračunamo, kolikokrat se to mesto pojavi (pomembnost mesta)
-        const occurrenceCount = chronologicalPlaces.filter(p => p === place).length;
-        const radius = 5 + Math.min(8, occurrenceCount * 1.5); // Večja pika, če je več dogodkov tam
+                // Ikona s številko in letnico
+                const numberIcon = L.divIcon({
+                    className: 'custom-map-number-container',
+                    html: `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <div style="
+                                background-color: var(--amber); 
+                                color: #000; 
+                                border-radius: 50%; 
+                                width: 22px; 
+                                height: 22px; 
+                                display: flex; 
+                                align-items: center; 
+                                justify-content: center; 
+                                font-weight: bold; 
+                                font-size: 11px;
+                                border: 2px solid #fff;
+                                box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+                            ">${orderNumber}</div>
+                            <div style="
+                                background: rgba(0, 0, 0, 0.85);
+                                color: #fff;
+                                font-size: 9px;
+                                padding: 1px 4px;
+                                border-radius: 3px;
+                                margin-top: 2px;
+                                white-space: nowrap;
+                                border: 1px solid rgba(255,255,255,0.2);
+                            ">${yearsDisplay}</div>
+                        </div>
+                    `,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 11]
+                });
 
-        // Zunanji sij za piko
-        svg.innerHTML += `
-            <circle cx="${x}" cy="${centerY}" r="${radius + 3}" fill="var(--amber)" opacity="0.15" />
-        `;
+                const popupHTML = `
+                    <div style="color: #000; font-family: sans-serif; max-height: 180px; overflow-y: auto; min-width: 180px;">
+                        <b style="font-size: 13px; color: #b45309;">${orderNumber}. ${station.name}</b><br>
+                        <i style="font-size: 11px; color: #666;">Obdobje: ${yearsDisplay}</i>
+                        <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ddd;">
+                        <div style="font-size: 11px; line-height: 1.4; max-height: 100px; overflow-y:auto;">
+                            ${station.eventTexts.map(t => `• ${t}`).join('<br>')}
+                        </div>
+                    </div>
+                `;
 
-        // Glavna pika mesta
-        svg.innerHTML += `
-            <circle cx="${x}" cy="${centerY}" r="${radius}" fill="#000" stroke="var(--amber)" stroke-width="2.5" />
-        `;
+                L.marker(finalCoords, { icon: numberIcon })
+                    .addTo(mapInstance)
+                    .bindPopup(popupHTML);
+            });
 
-        // Ime mesta (napisano navpično pod kotom -45 stopinj, da se imena ne prekrivajo!)
-        svg.innerHTML += `
-            <text x="${x}" y="${centerY + 18}" 
-                  fill="var(--text-light)" 
-                  font-size="12px" 
-                  font-weight="bold"
-                  text-anchor="end" 
-                  transform="rotate(-35, ${x}, ${centerY + 18})"
-                  style="user-select: none;">
-                ${place} (${occurrenceCount}x)
-            </text>
-        `;
-    });
+            // Povezovalna črtkana linija med vsemi točkami poti
+            if (latlngs.length > 1) {
+                const polyline = L.polyline(latlngs, {
+                    color: 'var(--amber)',
+                    weight: 2,
+                    opacity: 0.6,
+                    dashArray: '4, 6'
+                }).addTo(mapInstance);
+
+                // Namesto agresivnega približevanja na podlagi točk raje pustimo lep padding, 
+                // da ohranimo širok pogled na celo Evropo.
+                mapInstance.fitBounds(polyline.getBounds(), { padding: [80, 80] });
+            }
+
+            mapInstance.invalidateSize();
+
+        } catch (err) {
+            console.error("Napaka pri potovalnem diagramu:", err);
+        }
+    }, 150);
 }
 
 function renderTimeline(musician) {
@@ -791,15 +847,12 @@ function closeDetailsView() {
     const filterSelect = document.getElementById('location-filter');
     if (filterSelect) filterSelect.value = "";
     
-    // Ponovno prikažemo začetno besedilo (za PC)
     document.getElementById('placeholder-text').classList.remove('hidden');
     document.getElementById('back-btn').style.display = 'none';
 
-    // Mobilni preklop: VRNEMO SE NA PRVO STRAN (prikažemo seznam, skrijemo kronologijo)
     document.getElementById('sidebar').classList.remove('mobilno-skrij');
     document.getElementById('main-content').classList.remove('mobilno-prikaži');
     
-    // Če je bil iskalnik uporabljen, ga osvežimo, da vrne celoten seznam
     searchMusicians();
 }
 
@@ -810,25 +863,20 @@ function hideAllViews() {
 }
 
 function showAddMusicianForm() {
-    // 1. Skrijemo vse poglede, ki bi lahko prekrivali desno stran
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
     
-    // 2. Prikažemo obrazec za dodajanje
     const formEl = document.getElementById('add-musician-form');
     formEl.classList.remove('hidden');
 
-    // 3. Resetiramo naslov obrazca in spraznimo polja (če je prej ostalo kaj vpisano)
     document.getElementById('form-heading').textContent = "Dodaj novo osebo";
     document.getElementById('new-name').value = "";
     document.getElementById('new-birth').value = "";
     document.getElementById('new-death').value = "";
     document.getElementById('new-image').value = "";
 
-    // 4. Poskrbimo za gumb Nazaj
     document.getElementById('back-btn').style.display = 'inline-block';
 
-    // Mobilni preklop: skrijemo sidebar in prikažemo glavni del z obrazcem
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
 }
@@ -918,18 +966,15 @@ function showEventModal(isEdit, eventId = null) {
 function hideEventModal() {
     document.getElementById('event-modal').classList.add('hidden');
     
-    // Ponastavimo poglede
     document.getElementById('modal-single-view').classList.remove('hidden');
     if (document.getElementById('modal-auto-view')) {
         document.getElementById('modal-auto-view').classList.add('hidden');
     }
     document.getElementById('modal-merge-view').classList.add('hidden');
     
-    // TUKAJ PONOVNO PRIKAŽEMO ZAVIHKE za naslednjič:
     const tabsEl = document.querySelector('.modal-tabs');
     if (tabsEl) tabsEl.classList.remove('hidden');
     
-    // Ponastavi aktivni zavihek
     const tabSingle = document.getElementById('tab-single');
     const tabAuto = document.getElementById('tab-auto');
     if(tabSingle) tabSingle.classList.add('active');
@@ -1029,27 +1074,21 @@ function mergeMusicianPrompt() {
         return;
     }
 
-    // Skrijemo spustni meni možnosti
     document.getElementById('profile-dropdown').classList.add('hidden');
 
-    // 1. Skrijemo ostale poglede v modalu
     document.getElementById('modal-single-view').classList.add('hidden');
     if (document.getElementById('modal-auto-view')) {
         document.getElementById('modal-auto-view').classList.add('hidden');
     }
     
-    // TUKAJ SKRIJEMO ZAVIHKE (da ne piše Ročni vnos / AI ekstrakcija):
     const tabsEl = document.querySelector('.modal-tabs');
     if (tabsEl) tabsEl.classList.add('hidden');
     
-    // Prikažemo del za združevanje
     document.getElementById('modal-merge-view').classList.remove('hidden');
 
-    // 2. Nastavimo dinamična besedila
     document.getElementById('merge-label-current').textContent = `${sourceMusician.name} (Obdrži trenutnega)`;
     document.getElementById('merge-label-target').textContent = `Izbrani duplikat iz spodnjega seznama`;
 
-    // 3. Napolnimo spustni seznam
     const selectEl = document.getElementById('merge-target-select');
     selectEl.innerHTML = '<option value="">-- izberi skladatelja za združitev --</option>';
     
@@ -1059,7 +1098,6 @@ function mergeMusicianPrompt() {
         }
     });
 
-    // 4. Odpremo modal
     document.getElementById('event-modal').classList.remove('hidden');
 }
 
@@ -1094,35 +1132,25 @@ function executeMusicianMerge() {
         return;
     }
 
-    // 1. Prenos dogodkov
     if (!mainMusician.events) mainMusician.events = [];
     if (duplicateMusician.events && duplicateMusician.events.length > 0) {
         mainMusician.events = mainMusician.events.concat(duplicateMusician.events);
     }
 
-    // Sortiranje kronologije
     mainMusician.events.sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
 
-    // 2. STRIKTEN IZBRIS DUPLIKATA IZ BAZE
     musicians = musicians.filter(m => m.id !== duplicateMusician.id);
 
-    // 3. Shranjevanje v LocalStorage (da se ne vrne ob osvežitvi)
-    if (typeof saveToLocalStorage === "function") saveToLocalStorage();
-    else if (typeof shraniPodatke === "function") shraniPodatke();
-    else if (typeof saveToLocalStorageAndRender === "function") saveToLocalStorageAndRender();
+    saveToStorage();
 
-    // 4. Zapremo in ponastavimo modal
     hideEventModal();
 
     alert(`Uspešno združeno! Duplikat (${duplicateMusician.name}) je izbrisan.`);
 
-    // 5. AVTOMATSKO OSVEŽEVANJE VMESNIKA (da duplikat takoj izgine z ekrana)
-    // Pokličeva tvoje glavne funkcije za izris levega seznama in desnih podrobnosti:
     if (typeof renderMusicians === "function") renderMusicians();
     if (typeof renderMusicianList === "function") renderMusicianList();
     if (typeof posodobiSeznam === "function") posodobiSeznam();
     if (typeof updateSidebar === "function") updateSidebar();
     
-    // Prikažemo očiščen profil glavnega skladatelja
     showMusicianDetails(mainMusician.id);
 }
