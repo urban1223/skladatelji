@@ -728,7 +728,7 @@ async function renderJourneyDiagram(musician) {
 
     // 3. Izris zemljevida in markerjev
     try {
-        mapInstance = L.map('journey-map').setView(travelStations[0].coords, 4);
+        mapInstance = L.map('journey-map', { attributionControl: false }).setView(travelStations[0].coords, 4);
 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -942,6 +942,12 @@ function saveNewMusician() {
 }
 
 function showEventModal(isEdit, eventId = null) { 
+    // NOVO: Skrijemo zemljevid, ko se odpre modalno okno za dogodke
+    const journeyContainer = document.getElementById('composer-journey-container');
+    if (journeyContainer) {
+        journeyContainer.style.display = 'none';
+    }
+
     updateLinkDropdowns();
     updateLocationLists();
     switchModalTab('single');
@@ -995,6 +1001,15 @@ function hideEventModal() {
     const tabAuto = document.getElementById('tab-auto');
     if(tabSingle) tabSingle.classList.add('active');
     if(tabAuto) tabAuto.classList.remove('active');
+
+    // NOVO: Ponovno prikažemo zemljevid in osvežimo Leaflet
+    const journeyContainer = document.getElementById('composer-journey-container');
+    if (journeyContainer) {
+        journeyContainer.style.display = 'block';
+    }
+    if (mapInstance) {
+        mapInstance.invalidateSize();
+    }
 }
 
 function submitEventForm() {
