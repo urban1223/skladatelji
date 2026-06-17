@@ -307,7 +307,7 @@ document.getElementById('search-input').addEventListener('input', (e) => {
     }
 });
 
-function filterByYear(targetYear) {
+async function filterByYear(targetYear) {
     if (!targetYear) {
         closeDetailsView();
         return;
@@ -431,14 +431,36 @@ function filterByYear(targetYear) {
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
 
         const bounds = [];
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms)); // Pomožna funkcija za čakanje
 
-        allYearEvents.forEach(item => {
+        // TUKAJ JE KLJUČNA SPREMEMBA: Uporabimo for...of, da lahko asinhrono iščemo manjkajoče lokacije
+        for (const item of allYearEvents) {
             const locName = item.event.location;
-            if (!locName) return;
+            if (!locName || locName.trim() === '') continue;
 
+            const cleanLocName = locName.trim();
             let coords = null;
+            
             if (typeof GEO_COORDINATES !== 'undefined') {
-                coords = GEO_COORDINATES[locName] || GEO_COORDINATES[locName.trim()];
+                coords = GEO_COORDINATES[cleanLocName];
+            }
+
+            // Če koordinat ni v naši bazi, jih poiščemo na spletu
+            if (!coords) {
+                await sleep(1200); // Počakamo, da ne preobremenimo API-ja
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanLocName)}&limit=1`, {
+                        headers: { 'User-Agent': 'BaroqueArchiveApp/1.0' }
+                    });
+                    const data = await response.json();
+                    
+                    if (data && data.length > 0) {
+                        coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                        GEO_COORDINATES[cleanLocName] = coords; // Shranimo za prihodnja iskanja
+                    }
+                } catch (err) {
+                    console.error("Napaka pri iskanju kraja za leto:", cleanLocName);
+                }
             }
 
             if (coords) {
@@ -456,11 +478,11 @@ function filterByYear(targetYear) {
 
                 mapMarkersArray.push({
                     leafletMarker: marker,
-                    name: locName,
+                    name: cleanLocName,
                     years: item.event.year
                 });
             }
-        });
+        }
 
         if (mapMarkersArray.length > 0) {
             mapInstance.fitBounds(bounds, { padding: [40, 40] });
