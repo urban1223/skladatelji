@@ -12,6 +12,9 @@ let currentMusicianId = null;
 let editingEventId = null;
 let activeTab = 'single';
 let isEditingMusicianMode = false;
+let mapInstance = null;
+let mapMarkersArray = []; 
+let currentMapMarkerIndex = -1;
 
 window.onload = function() {
     const savedKey = localStorage.getItem('gemini_api_key');
@@ -30,6 +33,17 @@ window.onload = function() {
             if (e.target !== settingsBtn && !settingsBtn.contains(e.target) && !dropdown.contains(e.target)) {
                 dropdown.classList.add('hidden');
             }
+        }
+    });
+
+    // LOVLJENJE SISTEMSKEGA GUMBA "NAZAJ" (za mobilne naprave in brskalnik)
+    window.addEventListener('popstate', function(event) {
+        // Če v zgodovini ni več stanja "details", pomeni, da smo se vrnili na začetek
+        if (!event.state || event.state.view !== "details") {
+            closeDetailsView(true); // Iz argumenta sporočimo, da gre za sistemski nazaj
+        } else if (event.state && event.state.view === "details" && event.state.id) {
+            // Če v zgodovini skačemo nazaj med konkretnimi glasbeniki
+            showMusicianDetails(event.state.id);
         }
     });
 };
@@ -525,6 +539,8 @@ function filterByLocation(targetLoc) {
 
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
+
+    history.pushState({ view: "details", id: null }, "");
 }
 
 function parseWikiLinks(text) {
@@ -600,15 +616,18 @@ function showMusicianDetails(id) {
     document.getElementById('details-view').classList.remove('hidden');
     document.getElementById('back-btn').style.display = 'inline-block';
 
-    // KLJUČNI POPRAVEK: TUKAJ POKLIČEMO IZRIS ZEMLJEVIDA (ko je kontejner že viden)
+    // Pokličemo izris zemljevida (sedaj je asinhron, zato se izvede v ozadju)
     renderJourneyDiagram(m);
 
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
-}
 
-// Globalna spremenljivka za Leaflet
-let mapInstance = null;
+    // Dodamo lažno stanje v zgodovino brskalnika, da gumb nazaj ne zapre aplikacije
+    history.pushState({ view: "details", id: id }, "");
+} // <-- Tukaj se funkcija pravilno zapre.
+
+// TUKAJ SPODAJ SEDAJ PUSTI SAMO SLOVAR IN ASINHRONO FUNKCIJO, 
+// TRI SPREMENLJIVKE (let mapInstance...) PA PREMAKNI NA ČISTO VRH DATOTEKE!
 
 // Slovar geografskih koordinat
 const GEO_COORDINATES = {
@@ -632,9 +651,15 @@ const GEO_COORDINATES = {
     "Praga": [50.0755, 14.4378]
 };
 
-function renderJourneyDiagram(musician) {
+// Izboljšana asinhrona funkcija z avtomatskim spletnim geokodiranjem
+async function renderJourneyDiagram(musician) {
     const mapContainer = document.getElementById('journey-map');
     if (!mapContainer) return;
+
+    // POMEMBNO: Ponastavimo globalni navigacijski tabeli ob vsakem novem glasbeniku
+    mapMarkersArray = [];
+    currentMapMarkerIndex = -1;
+    updateMapNavDisplay(); // Ponastavi napis na plošči (npr. Postaja: 0 / 0)
 
     if (mapInstance) {
         mapInstance.remove();
@@ -651,11 +676,34 @@ function renderJourneyDiagram(musician) {
 
     // 2. Pametno združevanje zaporednih enakih krajev v potovalne "postaje"
     const travelStations = [];
-    sortedEvents.forEach(ev => {
-        if (!ev.location || ev.location.trim() === '') return;
+    
+    for (const ev of sortedEvents) {
+        if (!ev.location || ev.location.trim() === '') continue;
         
         const locName = ev.location.trim();
-        if (!GEO_COORDINATES[locName]) return; 
+        let coords = GEO_COORDINATES[locName];
+
+        // Če kraja ni v lokalnem slovarju, ga poiščemo preko OpenStreetMap API
+        if (!coords) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}&limit=1`, {
+                    headers: { 'User-Agent': 'BaroqueArchiveApp/1.0' }
+                });
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                    GEO_COORDINATES[locName] = coords; // Shranimo za prihodnjič
+                    console.log(`Najden nov kraj preko spleta: ${locName} -> ${coords}`);
+                } else {
+                    console.warn(`Kraja "${locName}" ni bilo mogoče najti.`);
+                    continue;
+                }
+            } catch (err) {
+                console.error("Napaka pri spletnem geokodiranju:", err);
+                continue;
+            }
+        }
 
         const lastStation = travelStations[travelStations.length - 1];
 
@@ -665,138 +713,97 @@ function renderJourneyDiagram(musician) {
         } else {
             travelStations.push({
                 name: locName,
-                coords: GEO_COORDINATES[locName],
+                coords: coords,
                 startYear: ev.year,
                 endYear: ev.year,
                 eventTexts: [`${ev.year}: ${ev.text}`]
             });
         }
-    });
+    }
 
     if (travelStations.length === 0) {
         mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">V kronologiji ni vpisanih znanih krajev za prikaz na zemljevidu.</div>`;
         return;
     }
 
-    // 3. Izris zemljevida po kratkem zamiku
-    setTimeout(() => {
-        try {
-            // Inicializacija zemljevida s pogledom na celo Evropo (zoom 4 ali 5)
-            mapInstance = L.map('journey-map').setView(travelStations[0].coords, 4);
+    // 3. Izris zemljevida in markerjev
+    try {
+        mapInstance = L.map('journey-map').setView(travelStations[0].coords, 4);
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap &copy; CARTO'
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(mapInstance);
+
+        const latlngs = [];
+        const locationCounts = {};
+        travelStations.forEach(s => { locationCounts[s.name] = (locationCounts[s.name] || 0) + 1; });
+        const currentIteration = {};
+
+        travelStations.forEach((station, index) => {
+            const orderNumber = index + 1;
+            currentIteration[station.name] = (currentIteration[station.name] || 0) + 1;
+
+
+            let finalCoords = [...station.coords];
+            latlngs.push(finalCoords);
+
+            const yearsDisplay = (station.startYear === station.endYear || !station.endYear) 
+                ? station.startYear 
+                : `${station.startYear}–${station.endYear}`;
+
+            const numberIcon = L.divIcon({
+                className: 'custom-map-number-container',
+                html: `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                        <div style="background-color: var(--amber); color: #000; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.4);">${orderNumber}</div>
+                        <div style="background: rgba(0, 0, 0, 0.85); color: #fff; font-size: 9px; padding: 1px 4px; border-radius: 3px; margin-top: 2px; white-space: nowrap; border: 1px solid rgba(255,255,255,0.2);">${yearsDisplay}</div>
+                    </div>
+                `,
+                iconSize: [40, 40],
+                iconAnchor: [20, 11]
+            });
+
+            const popupHTML = `
+                <div style="color: #000; font-family: sans-serif; max-height: 180px; overflow-y: auto; min-width: 180px;">
+                    <b style="font-size: 13px; color: #b45309;">${orderNumber}. ${station.name}</b><br>
+                    <i style="font-size: 11px; color: #666;">Obdobje: ${yearsDisplay}</i>
+                    <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ddd;">
+                    <div style="font-size: 11px; line-height: 1.4; max-height: 100px; overflow-y:auto;">
+                        ${station.eventTexts.map(t => `• ${t}`).join('<br>')}
+                    </div>
+                </div>
+            `;
+
+            const marker = L.marker(finalCoords, { icon: numberIcon })
+                .addTo(mapInstance)
+                .bindPopup(popupHTML);
+
+            // KLJUČNO: Tukaj napolnimo tabelo za delovanje gumbov Prejšnja/Naslednja
+            mapMarkersArray.push({
+                leafletMarker: marker,
+                name: station.name,
+                years: yearsDisplay
+            });
+        });
+
+        if (latlngs.length > 1) {
+            const polyline = L.polyline(latlngs, {
+                color: 'var(--amber)',
+                weight: 2,
+                opacity: 0.6,
+                dashArray: '4, 6'
             }).addTo(mapInstance);
 
-            const latlngs = [];
-            
-            // Slovar, ki nam pove, kolikokrat se je določen kraj že pojavil v celotni poti
-            const locationCounts = {};
-            travelStations.forEach(s => {
-                locationCounts[s.name] = (locationCounts[s.name] || 0) + 1;
-            });
-
-            // Tekoči števec ponovitev za zamike med izrisom
-            const currentIteration = {};
-
-            travelStations.forEach((station, index) => {
-                const orderNumber = index + 1;
-                currentIteration[station.name] = (currentIteration[station.name] || 0) + 1;
-
-                let finalCoords = [...station.coords];
-                const totalRepeats = locationCounts[station.name];
-
-                // NOVO / IZBOLJŠANO: Če se kraj v celotni poti ponovi več kot enkrat, 
-                // markerje razporedimo v popoln krog (Spiderfy) okoli dejanskega centra mesta,
-                // da se vidijo na daleč brez približevanja!
-                if (totalRepeats > 1) {
-                    const currentIdx = currentIteration[station.name] - 1;
-                    const angle = (currentIdx / totalRepeats) * 2 * Math.PI; // Kot v radianih
-                    
-                    // Polmer razmika (povečaj 0.15, če želiš še več razmika na daleč)
-                    const radius = 0.14; 
-                    
-                    finalCoords[0] += Math.sin(angle) * radius; // Lat zamik
-                    finalCoords[1] += Math.cos(angle) * radius; // Lng zamik
-                }
-
-                latlngs.push(finalCoords);
-
-                const yearsDisplay = (station.startYear === station.endYear || !station.endYear) 
-                    ? station.startYear 
-                    : `${station.startYear}–${station.endYear}`;
-
-                // Ikona s številko in letnico
-                const numberIcon = L.divIcon({
-                    className: 'custom-map-number-container',
-                    html: `
-                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                            <div style="
-                                background-color: var(--amber); 
-                                color: #000; 
-                                border-radius: 50%; 
-                                width: 22px; 
-                                height: 22px; 
-                                display: flex; 
-                                align-items: center; 
-                                justify-content: center; 
-                                font-weight: bold; 
-                                font-size: 11px;
-                                border: 2px solid #fff;
-                                box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-                            ">${orderNumber}</div>
-                            <div style="
-                                background: rgba(0, 0, 0, 0.85);
-                                color: #fff;
-                                font-size: 9px;
-                                padding: 1px 4px;
-                                border-radius: 3px;
-                                margin-top: 2px;
-                                white-space: nowrap;
-                                border: 1px solid rgba(255,255,255,0.2);
-                            ">${yearsDisplay}</div>
-                        </div>
-                    `,
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 11]
-                });
-
-                const popupHTML = `
-                    <div style="color: #000; font-family: sans-serif; max-height: 180px; overflow-y: auto; min-width: 180px;">
-                        <b style="font-size: 13px; color: #b45309;">${orderNumber}. ${station.name}</b><br>
-                        <i style="font-size: 11px; color: #666;">Obdobje: ${yearsDisplay}</i>
-                        <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ddd;">
-                        <div style="font-size: 11px; line-height: 1.4; max-height: 100px; overflow-y:auto;">
-                            ${station.eventTexts.map(t => `• ${t}`).join('<br>')}
-                        </div>
-                    </div>
-                `;
-
-                L.marker(finalCoords, { icon: numberIcon })
-                    .addTo(mapInstance)
-                    .bindPopup(popupHTML);
-            });
-
-            // Povezovalna črtkana linija med vsemi točkami poti
-            if (latlngs.length > 1) {
-                const polyline = L.polyline(latlngs, {
-                    color: 'var(--amber)',
-                    weight: 2,
-                    opacity: 0.6,
-                    dashArray: '4, 6'
-                }).addTo(mapInstance);
-
-                // Namesto agresivnega približevanja na podlagi točk raje pustimo lep padding, 
-                // da ohranimo širok pogled na celo Evropo.
-                mapInstance.fitBounds(polyline.getBounds(), { padding: [80, 80] });
-            }
-
-            mapInstance.invalidateSize();
-
-        } catch (err) {
-            console.error("Napaka pri potovalnem diagramu:", err);
+            mapInstance.fitBounds(polyline.getBounds(), { padding: [80, 80] });
         }
-    }, 150);
+
+        // Osvežimo navigacijski izpis na dnu zemljevida
+        updateMapNavDisplay();
+        mapInstance.invalidateSize();
+
+    } catch (err) {
+        console.error("Napaka pri potovalnem diagramu:", err);
+    }
 }
 
 function renderTimeline(musician) {
@@ -842,7 +849,7 @@ function renderTimeline(musician) {
     });
 }
 
-function closeDetailsView() {
+function closeDetailsView(isBrowserBack = false) {
     hideAllViews();
     const filterSelect = document.getElementById('location-filter');
     if (filterSelect) filterSelect.value = "";
@@ -854,8 +861,13 @@ function closeDetailsView() {
     document.getElementById('main-content').classList.remove('mobilno-prikaži');
     
     searchMusicians();
-}
 
+    // Če je uporabnik kliknil gumb na zaslonu (in ne sistemske tipke nazaj), 
+    // premaknemo zgodovino brskalnika nazaj
+    if (!isBrowserBack && history.state && history.state.view === "details") {
+        history.back();
+    }
+}
 function hideAllViews() {
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('add-musician-form').classList.add('hidden');
@@ -879,6 +891,8 @@ function showAddMusicianForm() {
 
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
+
+    history.pushState({ view: "details", id: null }, "");
 }
 
 function showEditMusicianForm() {
@@ -894,6 +908,8 @@ function showEditMusicianForm() {
     document.getElementById('new-image').value = m.img || '';
     document.getElementById('add-musician-form').classList.remove('hidden');
     document.getElementById('back-btn').style.display = 'inline-block';
+
+    history.pushState({ view: "details", id: null }, "");
 }
 
 function saveNewMusician() {
@@ -1153,4 +1169,46 @@ function executeMusicianMerge() {
     if (typeof updateSidebar === "function") updateSidebar();
     
     showMusicianDetails(mainMusician.id);
+}
+
+// Funkcija za posodobitev besedila na nadzorni plošči
+function updateMapNavDisplay() {
+    const statusText = document.getElementById('map-nav-status');
+    const placeText = document.getElementById('map-nav-current-place');
+    if (!statusText || !placeText) return;
+
+    if (mapMarkersArray.length === 0) {
+        statusText.textContent = "Postaja: 0 / 0";
+        placeText.textContent = "Ni podatkov za pot.";
+        return;
+    }
+
+    if (currentMapMarkerIndex === -1) {
+        statusText.textContent = `Skupno postaj: ${mapMarkersArray.length}`;
+        placeText.textContent = "Klikni 'Naslednja' za začetek poti (Postaja 1)";
+    } else {
+        const current = mapMarkersArray[currentMapMarkerIndex];
+        statusText.textContent = `Postaja: ${currentMapMarkerIndex + 1} / ${mapMarkersArray.length}`;
+        placeText.textContent = `${current.name} (${current.years})`;
+    }
+}
+
+// Funkcija, ki jo sprožita gumba Prejšnja / Naslednja
+function navigateMap(direction) {
+    if (mapMarkersArray.length === 0 || !mapInstance) return;
+
+    currentMapMarkerIndex += direction;
+
+    if (currentMapMarkerIndex < 0) {
+        currentMapMarkerIndex = 0;
+    }
+    if (currentMapMarkerIndex >= mapMarkersArray.length) {
+        currentMapMarkerIndex = mapMarkersArray.length - 1;
+    }
+
+    const target = mapMarkersArray[currentMapMarkerIndex];
+    
+    mapInstance.setView(target.leafletMarker.getLatLng(), 7);
+    target.leafletMarker.openPopup();
+    updateMapNavDisplay();
 }
