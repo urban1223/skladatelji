@@ -12,7 +12,44 @@
 
     <link rel="stylesheet" href="stil.css">
 </head>
+
 <body>
+
+<div id="auth-screen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0f172a; display: flex; justify-content: center; align-items: center; z-index: 99999; font-family: sans-serif;">
+    <div style="background: #1e293b; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 400px; text-align: center; border: 1px solid #334155;">
+        <h2 id="auth-title" style="color: var(--amber, #f59e0b); margin-bottom: 10px; font-size: 24px;">Arhiv baročnih skladateljev</h2>
+        <p id="auth-desc" style="color: #94a3b8; font-size: 14px; margin-bottom: 30px;">Za dostop do aplikacije se prosimo prijavite.</p>
+        
+        <form id="auth-form" onsubmit="handleAuth(event)">
+            <div style="margin-bottom: 20px; text-align: left;">
+                <label style="color: #cbd5e1; font-size: 12px; display: block; margin-bottom: 5px; font-weight: bold;">E-POŠTNI NASLOV</label>
+                <input type="email" id="auth-email" required style="width: 100%; padding: 12px; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; font-size: 14px; box-sizing: border-box;">
+            </div>
+            
+            <div style="margin-bottom: 25px; text-align: left;">
+                <label style="color: #cbd5e1; font-size: 12px; display: block; margin-bottom: 5px; font-weight: bold;">GESLO</label>
+                <input type="password" id="auth-password" required style="width: 100%; padding: 12px; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; font-size: 14px; box-sizing: border-box;">
+            </div>
+            
+            <button type="submit" id="auth-submit-btn" style="width: 100%; padding: 12px; background: var(--amber, #f59e0b); border: none; border-radius: 6px; color: #000; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s;">
+                Prijavi se
+            </button>
+        </form>
+
+        <div style="display: flex; align-items: center; margin: 20px 0; color: #64748b; font-size: 12px;">
+            <div style="flex: 1; height: 1px; background: #334155;"></div>
+            <span style="padding: 0 10px;">ALI</span>
+            <div style="flex: 1; height: 1px; background: #334155;"></div>
+        </div>
+
+        <button type="button" onclick="handleGoogleAuth()" style="width: 100%; padding: 12px; background: #fff; border: none; border-radius: 6px; color: #000; font-weight: bold; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: background 0.2s;">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" style="width: 18px; height: 18px;">
+            Prijavi se z Googlom
+        </button>
+        
+        <div id="auth-error" style="color: #ef4444; font-size: 13px; margin-top: 15px; display: none;"></div>
+    </div>
+</div>
 
     <div id="sidebar">
         <h2>Časovnice skladateljev</h2>
@@ -227,11 +264,146 @@
         </div>
     </div>
 
-   <script src="podatki.js"></script>
+    <script src="podatki.js"></script>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script src="aplikacija.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        // Uvozimo GoogleAuthProvider in signInWithPopup
+        import { 
+            getAuth, 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword,
+            getAuth as getFirebaseAuth,
+            GoogleAuthProvider,
+            signInWithPopup,
+            signOut, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+        // Tvoja uradna Firebase konfiguracija
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-JMU5q6kNV3f9bobpFMf3XFEF4chYRGg",
+            authDomain: "skladatelji.firebaseapp.com",
+            projectId: "skladatelji",
+            storageBucket: "skladatelji.firebasestorage.app",
+            messagingSenderId: "739953446061",
+            appId: "1:739953446061:web:8ce3494b49870ca1f60a24",
+            measurementId: "G-CE63D9WZRW"
+        };
+
+        // Inicializacija
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const googleProvider = new GoogleAuthProvider();
+
+        // Funkcija za Google prijavo preko pojavnega okna (Popup)
+        window.handleGoogleAuth = async function() {
+            const errorEl = document.getElementById('auth-error');
+            errorEl.style.display = 'none';
+            
+            try {
+                await signInWithPopup(auth, googleProvider);
+                // onAuthStateChanged bo zaznal prijavo in skril vstopno okno
+            } catch (error) {
+                console.error("Google prijava ni uspela:", error.code);
+                errorEl.style.display = 'block';
+                if (error.code === 'auth/popup-closed-by-user') {
+                    errorEl.textContent = "Okno za prijavo je bilo zaprto pred zaključkom.";
+                } else {
+                    errorEl.textContent = "Napaka pri Google prijavi: " + error.message;
+                }
+            }
+        };
+
+        // Spremenljivka za vodenje načina (login/signup)
+        let authMode = 'login';
+
+        // Funkcija za preklop med Login in Sign Up vidikom (za navaden email)
+        window.toggleAuthMode = function() {
+            const titleEl = document.getElementById('auth-title');
+            const descEl = document.getElementById('auth-desc');
+            const btnEl = document.getElementById('auth-submit-btn');
+            const toggleTextEl = document.getElementById('auth-toggle-text');
+            const errorEl = document.getElementById('auth-error');
+            
+            errorEl.style.display = 'none';
+
+            if (authMode === 'login') {
+                authMode = 'signup';
+                titleEl.textContent = "Ustvari nov račun";
+                descEl.textContent = "Registrirajte se za dostop do arhiva.";
+                btnEl.textContent = "Registriraj se";
+                toggleTextEl.innerHTML = `Že imate račun? <a href="#" onclick="toggleAuthMode()" style="color: var(--amber, #f59e0b); font-weight: bold; text-decoration: none;">Prijavite se</a>`;
+            } else {
+                authMode = 'login';
+                titleEl.textContent = "Arhiv baročnih skladateljev";
+                descEl.textContent = "Za dostop do aplikacije se prosimo prijavite.";
+                btnEl.textContent = "Prijavi se";
+                toggleTextEl.innerHTML = `Nimate računa? <a href="#" onclick="toggleAuthMode()" style="color: var(--amber, #f59e0b); font-weight: bold; text-decoration: none;">Ustvari račun</a>`;
+            }
+        };
+
+        // Klasična prijava/registracija z mailom
+        window.handleAuth = async function(event) {
+            event.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const errorEl = document.getElementById('auth-error');
+            
+            errorEl.style.display = 'none';
+
+            try {
+                if (authMode === 'login') {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                }
+            } catch (error) {
+                console.error("Avtentikacijska napaka:", error.code);
+                errorEl.style.display = 'block';
+                if (error.code === 'auth/email-already-in-use') {
+                    errorEl.textContent = "Ta e-poštni naslov je že registriran.";
+                } else if (error.code === 'auth/weak-password') {
+                    errorEl.textContent = "Geslo mora biti dolgo vsaj 6 znakov.";
+                } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+                    errorEl.textContent = "Napačen e-poštni naslov ali geslo.";
+                } else {
+                    errorEl.textContent = "Napaka: " + error.message;
+                }
+            }
+        };
+
+        // Globalna funkcija za odjavo
+        window.handleLogout = async function() {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("Napaka pri odjavi:", error);
+            }
+        };
+
+        // Avtomatski poslušalec stanja
+        onAuthStateChanged(auth, (user) => {
+            const authScreen = document.getElementById('auth-screen');
+            const logoutBtn = document.getElementById('logout-btn');
+
+            if (user) {
+                if (authScreen) authScreen.style.display = 'none';
+                if (logoutBtn) logoutBtn.style.display = 'block';
+                console.log("Trenutno prijavljen:", user.email);
+            } else {
+                if (authScreen) authScreen.style.display = 'flex';
+                if (logoutBtn) logoutBtn.style.display = 'none';
+                
+                const authForm = document.getElementById('auth-form');
+                if (authForm) authForm.reset();
+            }
+        });
+    </script>
 </body>
 </html>
