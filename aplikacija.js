@@ -1263,6 +1263,9 @@ async function renderJourneyDiagram(musician) {
         mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">Ni podatkov o dogodkih za zemljevid.</div>`;
         return;
     }
+
+    // Pomožna funkcija za čakanje (prepreči blokado API-ja)
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     
     const sortedEvents = [...musician.events].sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
     const travelStations = [];
@@ -1274,6 +1277,9 @@ async function renderJourneyDiagram(musician) {
         let coords = GEO_COORDINATES[locName];
 
         if (!coords) {
+            // Počakamo 1.2 sekunde med klici, da ne preobremenimo strežnika
+            await sleep(1200); 
+            
             try {
                 const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}&limit=1`, {
                     headers: { 'User-Agent': 'BaroqueArchiveApp/1.0' }
@@ -1282,27 +1288,27 @@ async function renderJourneyDiagram(musician) {
                 
                 if (data && data.length > 0) {
                     coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                    GEO_COORDINATES[locName] = coords;
-                } else {
-                    continue;
+                    GEO_COORDINATES[locName] = coords; // Shranimo za naslednjič
                 }
             } catch (err) {
-                continue;
+                console.error("Napaka pri iskanju:", locName);
             }
         }
 
-        const lastStation = travelStations[travelStations.length - 1];
-        if (lastStation && lastStation.name === locName) {
-            lastStation.endYear = ev.year;
-            lastStation.eventTexts.push(`${ev.year}: ${ev.text}`);
-        } else {
-            travelStations.push({
-                name: locName,
-                coords: coords,
-                startYear: ev.year,
-                endYear: ev.year,
-                eventTexts: [`${ev.year}: ${ev.text}`]
-            });
+        if (coords) {
+            const lastStation = travelStations[travelStations.length - 1];
+            if (lastStation && lastStation.name === locName) {
+                lastStation.endYear = ev.year;
+                lastStation.eventTexts.push(`${ev.year}: ${ev.text}`);
+            } else {
+                travelStations.push({
+                    name: locName,
+                    coords: coords,
+                    startYear: ev.year,
+                    endYear: ev.year,
+                    eventTexts: [`${ev.year}: ${ev.text}`]
+                });
+            }
         }
     }
 
@@ -1316,7 +1322,6 @@ async function renderJourneyDiagram(musician) {
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
 
         const latlngs = [];
-
         travelStations.forEach((station, index) => {
             const orderNumber = index + 1;
             let finalCoords = [...station.coords];
@@ -1367,13 +1372,11 @@ async function renderJourneyDiagram(musician) {
                 opacity: 0.6,
                 dashArray: '4, 6'
             }).addTo(mapInstance);
-
             mapInstance.fitBounds(polyline.getBounds(), { padding: [80, 80] });
         }
 
         updateMapNavDisplay();
         mapInstance.invalidateSize();
-
     } catch (err) {
         console.error("Napaka pri potovalnem diagramu:", err);
     }
