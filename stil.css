@@ -549,3 +549,9 @@ input:focus, textarea:focus, select:focus {
    9. POMOŽNI RAZREDI
    ========================================================================== */
 .hidden { display: none !important; }
+
+#journey-map {
+    height: 350px !important;
+    width: 100% !important;
+    background: #111827; /* Temno ozadje, da vidiš, če je sploh tam */
+}

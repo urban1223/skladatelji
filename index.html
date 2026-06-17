@@ -100,6 +100,24 @@
                 <h3 style="margin-bottom: 12px;">Zemljevid potovanj skladatelja</h3>
                 <div id="journey-map" style="height: 350px; width: 100%; border-radius: 6px; border: 1px solid var(--border-color); display: block;"></div>
             </div>
+
+            <div id="map-navigation-panel" style="
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between; 
+                background: var(--bg-card, #1f2937); 
+                padding: 10px 16px; 
+                border-radius: 8px; 
+                margin-top: 8px; 
+                border: 1px solid rgba(255,255,255,0.1);
+            ">
+                <button id="map-prev-btn" onclick="navigateMap(-1)" style="background: var(--amber, #b45309); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">← Prejšnja</button>
+                <div style="text-align: center; font-family: sans-serif;">
+                    <span id="map-nav-status" style="font-weight: bold; color: var(--amber, #b45309); font-size: 14px;">Postaja: 0 / 0</span>
+                    <div id="map-nav-current-place" style="font-size: 11px; color: #9ca3af; margin-top: 2px;">Izberi postajo ali klikni puščico</div>
+                </div>
+                <button id="map-next-btn" onclick="navigateMap(1)" style="background: var(--amber, #b45309); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">Naslednja →</button>
+            </div>
             
             <button id="add-event-btn" onclick="showEventModal(false)" style="margin-top: 24px;">+ Upravljanje dogodkov / Generator</button>
         </div>
