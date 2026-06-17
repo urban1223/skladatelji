@@ -550,6 +550,10 @@ input:focus, textarea:focus, select:focus {
    ========================================================================== */
 .hidden { display: none !important; }
 
+#back-btn {
+    display: none; 
+}
+
 #journey-map {
     height: 350px !important;
     width: 100% !important;

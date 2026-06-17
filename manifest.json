@@ -1,7 +1,7 @@
 {
-  "name": "Baročni Arhiv",
-  "short_name": "Arhiv",
-  "description": "Kronologije in potovalni diagrami baročnih glasbenikov",
+  "name": "Časovnice skladateljev Nova akademija",
+  "short_name": "Časovnice skladateljev",
+  "description": "Časovnice in potovalni diagrami baročnih glasbenikov",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#111827",
@@ -9,7 +9,7 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3815/3815550.png",
+      "src": "icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
