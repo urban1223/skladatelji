@@ -1,71 +1,15 @@
-// Registracija PWA Service Workerja
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('PWA Service Worker uspešno registriran!', reg.scope))
-            .catch(err => console.log('Registracija Service Workerja spodletela:', err));
-    });
-}
-
-// PRISILNI RESET: Pusti to tukaj samo za eno osvežitev strani!
+/* ==========================================================================
+   TRENUTNI RESET: Pusti to tukaj samo za eno osvežitev strani!
+   ========================================================================== */
 localStorage.setItem('baroque_archive_v7', JSON.stringify(zacetniPodatkiSkladateljev));
 
 let musicians = JSON.parse(localStorage.getItem('baroque_archive_v7')) || zacetniPodatkiSkladateljev;
 let currentMusicianId = null;
-let editingEventId = null;
-let activeTab = 'single';
 let isEditingMusicianMode = false;
-let mapInstance = null;
-let mapMarkersArray = []; 
-let currentMapMarkerIndex = -1;
-window.onload = function() {
-    const savedKey = localStorage.getItem('gemini_api_key');
-    if (savedKey) {
-        document.getElementById('gemini-api-key').value = savedKey;
-    }
-    searchMusicians();
-    updateLocationLists();
-    updateLinkDropdowns();
 
-    // Zapri spustni meni, če uporabnik klikne kamorkoli drugam
-    window.addEventListener('click', function(e) {
-        const dropdown = document.getElementById('profile-dropdown');
-        const settingsBtn = document.getElementById('profile-settings-btn');
-        
-        if (dropdown && dropdown.classList.contains('prikazi-meni')) {
-            if (!settingsBtn.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.classList.remove('prikazi-meni');
-            }
-        }
-    });
-
-    // LOVLJENJE SISTEMSKEGA GUMBA "NAZAJ"
-    window.addEventListener('popstate', function(event) {
-        if (!event.state || event.state.view !== "details") {
-            // Uporabimo interno funkcijo za zapiranje brez ponovnega klicanja history.back()
-            // Zato v closeDetailsView ne smeš imeti klica history.back()
-            document.getElementById('details-view').classList.add('hidden');
-            document.getElementById('placeholder-text').classList.remove('hidden');
-            document.getElementById('back-btn').style.display = 'none';
-            document.getElementById('sidebar').classList.remove('mobilno-skrij');
-            document.getElementById('main-content').classList.remove('mobilno-prikaži');
-            currentMusicianId = null;
-        } else if (event.state && event.state.view === "details" && event.state.id) {
-            showMusicianDetails(event.state.id);
-        }
-    });
-
-    // NOVO: Iskanje ob pritisku na tipko ENTER znotraj vnosnega polja
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prepreči privzeto obnašanje (npr. osveževanje ali pošiljanje obrazca)
-                searchMusicians();      // Sproži iskanje po imenu ali letu
-            }
-        });
-    }
-};
+/* ==========================================================================
+   UPRAVLJANJE SPUSTNEGA MENIJA IN PROFILA
+   ========================================================================== */
 
 function generateId(name) { 
     return name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'); 
@@ -80,10 +24,6 @@ function parseYear(yearStr) {
 function saveToStorage() { 
     localStorage.setItem('baroque_archive_v7', JSON.stringify(musicians)); 
 }
-
-/* ==========================================================================
-   UPRAVLJANJE SPUSTNEGA MENIJA IN PROFILA
-   ========================================================================== */
 
 function toggleProfileDropdown(event) {
     event.stopPropagation();
@@ -210,20 +150,7 @@ function insertLinkFromDropdown(textareaId, selectId) {
     area.focus();
 }
 
-function switchModalTab(tab) {
-    activeTab = tab;
-    if(tab === 'single') {
-        document.getElementById('tab-single').classList.add('active');
-        document.getElementById('tab-auto').classList.remove('active');
-        document.getElementById('modal-single-view').classList.remove('hidden');
-        document.getElementById('modal-auto-view').classList.add('hidden');
-    } else {
-        document.getElementById('tab-single').classList.remove('active');
-        document.getElementById('tab-auto').classList.add('active');
-        document.getElementById('modal-single-view').classList.add('hidden');
-        document.getElementById('modal-auto-view').classList.remove('hidden');
-    }
-}
+
 
 // Pomožna funkcija za izris seznama (da ni podvajanja kode)
 function renderMusicianList(data) {
@@ -306,6 +233,21 @@ document.getElementById('search-input').addEventListener('input', (e) => {
         searchMusicians();
     }
 });
+
+// Avtomatski sprožilec za ime, a ne za letnico (dokler ni dolga 4 znake)
+const searchInput = document.getElementById('search-input');
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        // Če je vpisana 4-mestna številka, avtomatsko sproži iskanje po letu
+        if (/^\d{4}$/.test(query)) {
+            if (typeof searchMusicians === 'function') searchMusicians();
+        } else if (!/^\d+$/.test(query)) {
+            // Če ni samo številka (torej vpisuješ ime), sproži sproti
+            if (typeof searchMusicians === 'function') searchMusicians();
+        }
+    });
+}
 
 async function filterByYear(targetYear) {
     if (!targetYear) {
@@ -707,133 +649,10 @@ function showMusicianDetails(id) {
    AI EKSTRAKCIJA IN MODALNA OKNA
    ========================================================================== */
 
-async function extractEventsWithGemini() {
-    const apiKey = document.getElementById('gemini-api-key').value.trim();
-    const text = document.getElementById('raw-bio-input').value.trim();
-
-    if (!apiKey) { alert("Prosim, vnesite svoj Google Gemini API ključ."); return; }
-    if (!text) { alert("Prilepite besedilo za analizo."); return; }
-
-    const btn = document.getElementById('ai-analyze-btn');
-    btn.textContent = "AI razmišlja in preureja stavke...";
-    btn.disabled = true;
-
-    const existingLocs = getAllExistingLocations();
-
-    const prompt = `Danes deluješ kot strokovni zgodovinski asistent za ekstrakcijo podatkov. 
-Iz naslednjega zgodovinskega besedila izlušči dogodke in dela ter jih vrni v strogi JSON strukturi.
-
-ZAHTEVANA PRAVILA ZA AI EKSTRAKCIJO:
-JEZIK: Vsi opisi dogodkov morajo biti VEDNO v slovenščini. Prevedi smiselno, strokovno in jedrnato. Slog naj bo deskriptiven (npr. "Zaposlitev kot organist na dvoru", "Izid zbirke madrigalov", "Rojstvo", "Smrt"). Nakoncu vsakega opisa je VEDNO pika.
-
-LOKACIJA (KRAJ): Vedno identificiraj geografsko lokacijo. Uporabljaj slovenski imenovalnik (npr. "Gradec", "Benetke", "Dunaj", "Rim"). Če lokacije ni mogoče zaznati, vrni prazen niz "".
-
-USKLAJENOST KRAJEV: Uporabi uveljavljena slovenska imena za mesta. Za usklajevanje z obstoječimi lokacijami v bazi uporabi standardizirana poimenovanja.
-
-FILTRIRANJE: Ignoriraj tehnične oznake (BWV, RV, Op.), razen če so del naslova zbirke, ki jo je smiselno ohraniti.
-
-FORMAT ODGOVORA: Odgovor vrni STRIKTNO kot veljaven JSON array objekt. Brez kakršnihkoli uvodnih besed, brez oznak brez zaključnih besed.
-
-Format mora biti natančno tak:
-[{"year": "Letnica", "location": "Kraj", "text": "Kratek in jedrnat opis v slovenščini s piko na koncu."}]
-
-Besedilo za analizo:
-${text}`;
-
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-
-        const data = await response.json();
-        
-        if (!data.candidates || !data.candidates[0]) {
-            throw new Error("API ni vrnil veljavnih podatkov. Preveri API ključ.");
-        }
-
-        let aiTextResponse = data.candidates[0].content.parts[0].text.trim();
-        aiTextResponse = aiTextResponse.replace(/^```json/i, "").replace(/```$/, "").trim();
-        
-        const parsedEvents = JSON.parse(aiTextResponse);
-        displayExtractedRows(parsedEvents);
-
-    } catch (error) {
-        console.error(error);
-        alert("Prišlo je do napake pri komunikaciji z AI ali obdelavi podatkov. Preverite ključ in poskusite ponovno.");
-    } finally {
-        btn.textContent = "✨ Preuredi in analiziraj z AI";
-        btn.disabled = false;
-    }
-}
 
 
-function displayExtractedRows(events) {
-    const resultsContainer = document.getElementById('extraction-results-container');
-    const listEl = document.getElementById('extraction-rows-list');
-    listEl.innerHTML = '';
 
-    if(!Array.isArray(events) || events.length === 0) {
-        listEl.innerHTML = '<p style="font-style:italic; color:var(--text-muted); font-size:13px;">AI ni uspel izluščiti dogodkov.</p>';
-        document.getElementById('save-extracted-btn').classList.add('hidden');
-    } else {
-        events.sort((a,b) => (parseYear(a.year) || 0) - (parseYear(b.year) || 0));
 
-        events.forEach((ev, idx) => {
-            const row = document.createElement('div');
-            row.className = 'extracted-row';
-            row.innerHTML = `
-                <input type="checkbox" id="ext-check-${idx}" checked style="width:auto; margin-right:4px;">
-                <input type="text" id="ext-year-${idx}" value="${ev.year || ''}" style="width:60px; text-align:center; font-weight:bold; color:var(--amber);">
-                <input type="text" id="ext-loc-${idx}" value="${ev.location || ''}" placeholder="Kraj" style="width:100px;">
-                <input type="text" id="ext-text-${idx}" value="${ev.text || ''}" style="flex:1;">
-            `;
-            listEl.appendChild(row);
-        });
-        document.getElementById('save-extracted-btn').classList.remove('hidden');
-    }
-    resultsContainer.classList.remove('hidden');
-}
-
-function saveCheckedExtractedEvents() {
-    const m = musicians.find(item => item.id === currentMusicianId);
-    if (!m) return;
-    if (!m.events) m.events = [];
-
-    const rows = document.getElementById('extraction-rows-list').children;
-    let importCount = 0;
-
-    for(let i = 0; i < rows.length; i++) {
-        const checkbox = document.getElementById(`ext-check-${i}`);
-        if (checkbox && checkbox.checked) {
-            const year = document.getElementById(`ext-year-${i}`).value.trim();
-            const location = document.getElementById(`ext-loc-${i}`).value.trim();
-            const text = document.getElementById(`ext-text-${i}`).value.trim();
-
-            if(text) {
-                m.events.push({
-                    id: Date.now() + i,
-                    year: year,
-                    location: location,
-                    text: text
-                });
-                importCount++;
-            }
-        }
-    }
-
-    if(importCount > 0) {
-        saveToStorage();
-        updateLocationLists();
-        renderTimeline(m);
-        document.getElementById('pure-summary').innerHTML = generatePureSummary(m);
-        alert(`Uspešno preurejenih in uvoženih ${importCount} dogodkov!`);
-        hideEventModal();
-    } else {
-        alert("Noben dogodek ni bil izbran.");
-    }
-}
 
 function renderTimeline(musician) {
     const timelineEl = document.getElementById('timeline');
@@ -1231,272 +1050,4 @@ function executeMusicianMerge() {
 
     alert(`Uspešno združeno! Duplikat (${duplicateMusician.name}) je izbrisan.`);
     showMusicianDetails(mainMusician.id);
-}
-
-/* ==========================================================================
-   LEAFLET ZEMLJEVIDI IN NAVIGACIJA
-   ========================================================================== */
-
-const GEO_COORDINATES = {
-    "Ljubljana": [46.0569, 14.5058],
-    "Graz": [47.0707, 15.4395],
-    "Gradec": [47.0707, 15.4395],
-    "Vienna": [48.2082, 16.3738],
-    "Dunaj": [48.2082, 16.3738],
-    "Salzburg": [47.8095, 13.0550],
-    "Venice": [45.4408, 12.3155],
-    "Benetke": [45.4408, 12.3155],
-    "Rome": [41.9028, 12.4964],
-    "Rim": [41.9028, 12.4964],
-    "London": [51.5074, -0.1278],
-    "Paris": [48.8566, 2.3522],
-    "Pariz": [48.8566, 2.3522],
-    "Leipzig": [51.3397, 12.3731],
-    "Dresden": [51.0504, 13.7373],
-    "Hamburg": [53.5511, 9.9937],
-    "Prague": [50.0755, 14.4378],
-    "Praga": [50.0755, 14.4378]
-};
-
-async function renderJourneyDiagram(musician) {
-    const mapContainer = document.getElementById('journey-map');
-    const navPanel = document.getElementById('map-navigation-panel');
-    const journeyContainer = document.getElementById('composer-journey-container');
-
-    if (navPanel) navPanel.style.display = 'flex'; 
-    if (mapContainer) mapContainer.style.height = '350px'; 
-    if (journeyContainer) {
-        const titleEl = journeyContainer.querySelector('h3');
-        if (titleEl) titleEl.textContent = "Zemljevid potovanj skladatelja";
-    }
-
-    if (!mapContainer) return;
-
-    mapMarkersArray = [];
-    currentMapMarkerIndex = -1;
-    updateMapNavDisplay();
-
-    if (mapInstance) {
-        mapInstance.remove();
-        mapInstance = null;
-    }
-
-    if (!musician.events || musician.events.length === 0) {
-        mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">Ni podatkov o dogodkih za zemljevid.</div>`;
-        return;
-    }
-
-    // Pomožna funkcija za čakanje (prepreči blokado API-ja)
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-    
-    const sortedEvents = [...musician.events].sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
-    const travelStations = [];
-    
-    for (const ev of sortedEvents) {
-        if (!ev.location || ev.location.trim() === '') continue;
-        
-        const locName = ev.location.trim();
-        let coords = GEO_COORDINATES[locName];
-
-        if (!coords) {
-            // Počakamo 1.2 sekunde med klici, da ne preobremenimo strežnika
-            await sleep(1200); 
-            
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}&limit=1`, {
-                    headers: { 'User-Agent': 'BaroqueArchiveApp/1.0' }
-                });
-                const data = await response.json();
-                
-                if (data && data.length > 0) {
-                    coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                    GEO_COORDINATES[locName] = coords; // Shranimo za naslednjič
-                }
-            } catch (err) {
-                console.error("Napaka pri iskanju:", locName);
-            }
-        }
-
-        if (coords) {
-            const lastStation = travelStations[travelStations.length - 1];
-            if (lastStation && lastStation.name === locName) {
-                lastStation.endYear = ev.year;
-                lastStation.eventTexts.push(`${ev.year}: ${ev.text}`);
-            } else {
-                travelStations.push({
-                    name: locName,
-                    coords: coords,
-                    startYear: ev.year,
-                    endYear: ev.year,
-                    eventTexts: [`${ev.year}: ${ev.text}`]
-                });
-            }
-        }
-    }
-
-    if (travelStations.length === 0) {
-        mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted);">V kronologiji ni vpisanih znanih krajev za prikaz na zemljevidu.</div>`;
-        return;
-    }
-
-    try {
-        mapInstance = L.map('journey-map', { attributionControl: false }).setView(travelStations[0].coords, 4);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
-
-        const latlngs = [];
-        travelStations.forEach((station, index) => {
-            const orderNumber = index + 1;
-            let finalCoords = [...station.coords];
-            latlngs.push(finalCoords);
-
-            const yearsDisplay = (station.startYear === station.endYear || !station.endYear) 
-                ? station.startYear 
-                : `${station.startYear}–${station.endYear}`;
-
-            const numberIcon = L.divIcon({
-                className: 'custom-map-number-container',
-                html: `
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                        <div style="background-color: var(--amber); color: #000; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.4);">${orderNumber}</div>
-                        <div style="background: rgba(0, 0, 0, 0.85); color: #fff; font-size: 9px; padding: 1px 4px; border-radius: 3px; margin-top: 2px; white-space: nowrap; border: 1px solid rgba(255,255,255,0.2);">${yearsDisplay}</div>
-                    </div>
-                `,
-                iconSize: [40, 40],
-                iconAnchor: [20, 11]
-            });
-
-            const popupHTML = `
-                <div style="color: #000; font-family: sans-serif; max-height: 180px; overflow-y: auto; min-width: 180px;">
-                    <b style="font-size: 13px; color: #b45309;">${orderNumber}. ${station.name}</b><br>
-                    <i style="font-size: 11px; color: #666;">Obdobje: ${yearsDisplay}</i>
-                    <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ddd;">
-                    <div style="font-size: 11px; line-height: 1.4; max-height: 100px; overflow-y:auto;">
-                        ${station.eventTexts.map(t => `• ${t}`).join('<br>')}
-                    </div>
-                </div>
-            `;
-
-            const marker = L.marker(finalCoords, { icon: numberIcon })
-                .addTo(mapInstance)
-                .bindPopup(popupHTML);
-
-            mapMarkersArray.push({
-                leafletMarker: marker,
-                name: station.name,
-                years: yearsDisplay
-            });
-        });
-
-        if (latlngs.length > 1) {
-            const polyline = L.polyline(latlngs, {
-                color: 'var(--amber)',
-                weight: 2,
-                opacity: 0.6,
-                dashArray: '4, 6'
-            }).addTo(mapInstance);
-            mapInstance.fitBounds(polyline.getBounds(), { padding: [80, 80] });
-        }
-
-        updateMapNavDisplay();
-        mapInstance.invalidateSize();
-    } catch (err) {
-        console.error("Napaka pri potovalnem diagramu:", err);
-    }
-}
-
-function updateMapNavDisplay() {
-    const statusText = document.getElementById('map-nav-status');
-    const placeText = document.getElementById('map-nav-current-place');
-    if (!statusText || !placeText) return;
-
-    if (mapMarkersArray.length === 0) {
-        statusText.textContent = "Postaja: 0 / 0";
-        placeText.textContent = "Ni podatkov za pot.";
-        return;
-    }
-
-    if (currentMapMarkerIndex === -1) {
-        statusText.textContent = `Skupno postaj: ${mapMarkersArray.length}`;
-        placeText.textContent = "Klikni 'Naslednja' za začetek poti (Postaja 1)";
-    } else {
-        const current = mapMarkersArray[currentMapMarkerIndex];
-        statusText.textContent = `Postaja: ${currentMapMarkerIndex + 1} / ${mapMarkersArray.length}`;
-        placeText.textContent = `${current.name} (${current.years})`;
-    }
-}
-
-function navigateMap(direction) {
-    if (mapMarkersArray.length === 0 || !mapInstance) return;
-
-    currentMapMarkerIndex += direction;
-    if (currentMapMarkerIndex < 0) currentMapMarkerIndex = 0;
-    if (currentMapMarkerIndex >= mapMarkersArray.length) currentMapMarkerIndex = mapMarkersArray.length - 1;
-
-    const target = mapMarkersArray[currentMapMarkerIndex];
-    mapInstance.setView(target.leafletMarker.getLatLng(), 7);
-    target.leafletMarker.openPopup();
-    updateMapNavDisplay();
-}
-
-function renderLocationMap(locationName) {
-    const mapContainer = document.getElementById('journey-map');
-    const journeyContainer = document.getElementById('composer-journey-container');
-    const navPanel = document.getElementById('map-navigation-panel');
-    
-    if (!mapContainer || !journeyContainer) return;
-    if (navPanel) navPanel.style.setProperty('display', 'none', 'important');
-
-    const titleEl = journeyContainer.querySelector('h3');
-    if (titleEl) titleEl.textContent = `Lokacija: ${locationName}`;
-    mapContainer.style.setProperty('height', '550px', 'important');
-
-    if (mapInstance) {
-        mapInstance.remove();
-        mapInstance = null;
-    }
-
-    function drawMarker(coords) {
-        try {
-            mapInstance = L.map('journey-map', { attributionControl: false }).setView(coords, 8);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
-
-            const locationIcon = L.divIcon({
-                className: 'custom-map-location-container',
-                html: `<div style="background-color: var(--amber); color: #000; border-radius: 50%; width: 16px; height: 16px; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.4);"></div>`,
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            });
-
-            L.marker(coords, { icon: locationIcon })
-                .addTo(mapInstance)
-                .bindPopup(`<b style="color: #000;">${locationName}</b>`)
-                .openPopup();
-
-            mapInstance.invalidateSize();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    if (typeof GEO_COORDINATES !== 'undefined' && GEO_COORDINATES[locationName]) {
-        drawMarker(GEO_COORDINATES[locationName]);
-        return;
-    }
-
-    mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Iščem koordinate za kraj "${locationName}"...</div>`;
-
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}&limit=1`)
-        .then(response => response.json())
-        .then(data => {
-            if (data && data.length > 0) {
-                mapContainer.innerHTML = '';
-                drawMarker([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
-            } else {
-                mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Koordinat za kraj "${locationName}" ni mogoče najti.</div>`;
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Napaka pri povezavi z iskalnikom.</div>`;
-        });
 }
