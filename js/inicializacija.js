@@ -4,12 +4,12 @@ window.onload = function() {
         document.getElementById('gemini-api-key').value = savedKey;
     }
     
-    // Sproži iskanje in inicializacijo na podlagi naloženih podatkov
+    // Trigger search and initialization based on loaded data
     if (typeof searchMusicians === 'function') searchMusicians();
     if (typeof updateLocationLists === 'function') updateLocationLists();
     if (typeof updateLinkDropdowns === 'function') updateLinkDropdowns();
 
-    // Zapri spustni meni, če uporabnik klikne kamorkoli drugam
+    // Close dropdown menu if the user clicks anywhere else
     window.addEventListener('click', function(e) {
         const dropdown = document.getElementById('profile-dropdown');
         const settingsBtn = document.getElementById('profile-settings-btn');
@@ -21,11 +21,11 @@ window.onload = function() {
         }
     });
 
-    // LOVLJENJE SISTEMSKEGA GUMBA "NAZAJ"
+    // CATCH SYSTEM "BACK" BUTTON
     window.addEventListener('popstate', function(event) {
         if (!event.state || event.state.view !== "details") {
-            // Uporabimo interno funkcijo za zapiranje brez ponovnega klicanja history.back()
-            // Zato v closeDetailsView ne smeš imeti klica history.back()
+            // Use internal close function without calling history.back() again
+            // Therefore, closeDetailsView must not contain history.back() call
             if (document.getElementById('details-view')) document.getElementById('details-view').classList.add('hidden');
             if (document.getElementById('placeholder-text')) document.getElementById('placeholder-text').classList.remove('hidden');
             if (document.getElementById('back-btn')) document.getElementById('back-btn').style.display = 'none';
@@ -37,13 +37,13 @@ window.onload = function() {
         }
     });
 
-    // NOVO: Iskanje ob pritisku na tipko ENTER znotraj vnosnega polja
+    // NEW: Search on ENTER key press inside the input field
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
         searchInput.addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
-                event.preventDefault(); // Prepreči privzeto obnašanje (npr. osveževanje ali pošiljanje obrazca)
-                if (typeof searchMusicians === 'function') searchMusicians(); // Sproži iskanje po imenu ali letu
+                event.preventDefault(); // Prevent default behavior (e.g. refreshing or form submission)
+                if (typeof searchMusicians === 'function') searchMusicians(); // Trigger search by name or year
             }
         });
     }

@@ -1,15 +1,15 @@
 const CACHE_NAME = 'baroque-archive-v3';
 
-// Namestitev - takoj aktiviramo nov SW
+// Installation - activate the new SW immediately
 self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
-// Čiščenje starih predpomnilnikov in prevzem nadzora nad vsemi klienti
+// Clean up old caches and take control of all clients
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     Promise.all([
-      // Čiščenje starih verzij
+      // Clean up old versions
       caches.keys().then((keys) => {
         return Promise.all(
           keys.map((key) => {
@@ -19,21 +19,21 @@ self.addEventListener('activate', (e) => {
           })
         );
       }),
-      // SW prevzame nadzor nad vsemi zavihki takoj
+      // SW takes control of all tabs immediately
       self.clients.claim()
     ])
   );
 });
 
-// Lovljenje zahtevkov
+// Intercepting requests
 self.addEventListener('fetch', (e) => {
-  // Shranjujemo samo lokalne datoteke
+  // Only handle local files
   if (!e.request.url.startsWith(self.location.origin)) return;
 
   e.respondWith(
     fetch(e.request)
       .then((response) => {
-        // Če je odgovor veljaven, ga shranimo v cache
+        // If the response is valid, save it to the cache
         if (response && response.status === 200 && response.type === 'basic') {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -43,7 +43,7 @@ self.addEventListener('fetch', (e) => {
         return response;
       })
       .catch(() => {
-        // Če smo offline, vrni iz cache-a
+        // If offline, return from the cache
         return caches.match(e.request);
       })
   );

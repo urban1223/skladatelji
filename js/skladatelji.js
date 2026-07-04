@@ -1,14 +1,64 @@
 /* ==========================================================================
-   TRENUTNI RESET: Pusti to tukaj samo za eno osvežitev strani!
+   SHARED DATABASE (FIRESTORE) — musicians and events are now stored in the cloud,
+   visible to all logged-in users.
    ========================================================================== */
-localStorage.setItem('baroque_archive_v7', JSON.stringify(zacetniPodatkiSkladateljev));
 
-let musicians = JSON.parse(localStorage.getItem('baroque_archive_v7')) || zacetniPodatkiSkladateljev;
+let musicians = [];
 let currentMusicianId = null;
 let isEditingMusicianMode = false;
 
+// HTML escape to prevent XSS attacks
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Save a single musician (with all events) to Firestore
+async function shraniGlasbenikaVFirestore(m) {
+    if (!window.db) { console.error("Firestore is not available."); return; }
+    try {
+        await window.fsSetDoc(window.fsDoc(window.db, 'musicians', m.id), m);
+    } catch (err) {
+        console.error("Error saving to the shared database:", err);
+        alert("Error saving to the shared database. Check your internet connection.");
+    }
+}
+
+// Delete musician from Firestore
+async function izbrisiGlasbenikaIzFirestore(id) {
+    if (!window.db) return;
+    try {
+        await window.fsDeleteDoc(window.fsDoc(window.db, 'musicians', id));
+    } catch (err) {
+        console.error("Error deleting from the shared database:", err);
+        alert("Error deleting from the shared database.");
+    }
+}
+
+// Load all musicians from Firestore (called on login from firebase-auth.js)
+async function naloziGlasbenikeIzFirestore() {
+    if (!window.db) { console.error("Firestore is not available."); return; }
+    try {
+        const snapshot = await window.fsGetDocs(window.fsCollection(window.db, 'musicians'));
+        musicians = [];
+        snapshot.forEach(d => musicians.push(d.data()));
+        if (typeof searchMusicians === 'function') searchMusicians();
+        if (typeof updateLocationLists === 'function') updateLocationLists();
+        if (typeof updateLinkDropdowns === 'function') updateLinkDropdowns();
+    } catch (err) {
+        console.error("Error loading the shared database:", err);
+        alert("Error loading the shared database from Firestore.");
+    }
+}
+window.naloziGlasbenikeIzFirestore = naloziGlasbenikeIzFirestore;
+
 /* ==========================================================================
-   UPRAVLJANJE SPUSTNEGA MENIJA IN PROFILA
+   DROPDOWN MENU AND PROFILE MANAGEMENT
    ========================================================================== */
 
 function generateId(name) { 
@@ -21,10 +71,6 @@ function parseYear(yearStr) {
     return match ? parseInt(match[0], 10) : null;
 }
 
-function saveToStorage() { 
-    localStorage.setItem('baroque_archive_v7', JSON.stringify(musicians)); 
-}
-
 function toggleProfileDropdown(event) {
     event.stopPropagation();
     const dropdown = document.getElementById('profile-dropdown');
@@ -35,16 +81,21 @@ function deleteMusician() {
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
 
-    const potrditev = confirm(`⚠️ POZOR: Ali res želiš izbrisati skladatelja "${m.name}" in vse njegove povezane dogodke? Tega dejanja ni mogoče razveljaviti.`);
+    if (m.vnesUID && m.vnesUID !== window.trenutniUporabnikUID) {
+        alert("You can only delete people you added yourself.");
+        return;
+    }
+
+    const potrditev = confirm(`⚠️ WARNING: Are you sure you want to delete the composer "${m.name}" and all their associated events? This action cannot be undone.`);
     
     if (potrditev) {
         musicians = musicians.filter(item => item.id !== currentMusicianId);
-        saveToStorage();
+        izbrisiGlasbenikaIzFirestore(m.id);
         searchMusicians();
         updateLocationLists();
         updateLinkDropdowns();
         closeDetailsView();
-        alert("Oseba je bila uspešno odstranjena iz arhiva.");
+        alert("The person was successfully removed from the archive.");
     }
 }
 
@@ -55,7 +106,7 @@ function exportSingleMusician() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(m, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `arhiv_${m.id}.json`);
+    downloadAnchor.setAttribute("download", `archive_${m.id}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -71,7 +122,7 @@ function copyProfileToClipboard() {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = generatePureSummary(m);
     textToCopy += tempDiv.textContent || tempDiv.innerText;
-    textToCopy += `\n\nKRONOLOGIJA IN DELA:\n`;
+    textToCopy += `\n\nCHRONOLOGY AND WORKS:\n`;
 
     if (m.events && m.events.length > 0) {
         const sortedEvents = [...m.events].sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
@@ -82,7 +133,7 @@ function copyProfileToClipboard() {
             const eventYear = parseYear(e.year);
             if (birthYear && eventYear) {
                 const age = eventYear - birthYear;
-                if (age >= 0 && age <= 110) ageStr = ` (star ${age} let)`;
+                if (age >= 0 && age <= 110) ageStr = ` (${age} years old)`;
             }
             const locStr = e.location ? ` [📍 ${e.location}]` : '';
             const cleanText = e.text.replace(/\[\[(.*?)\]\]/g, '$1');
@@ -90,18 +141,18 @@ function copyProfileToClipboard() {
             textToCopy += `- ${e.year || '????'}${locStr}${ageStr}: ${cleanText}\n`;
         });
     } else {
-        textToCopy += `(Ni zabeleženih dogodkov)`;
+        textToCopy += `(No events recorded)`;
     }
 
     navigator.clipboard.writeText(textToCopy).then(() => {
-        alert(`Profil za "${m.name}" je kopiran v odložišče! Sedaj ga lahko prilepiš v Word (Ctrl+V).`);
+        alert(`The profile for "${m.name}" has been copied to the clipboard! You can now paste it into Word (Ctrl+V).`);
     }).catch(err => {
-        alert("Napaka pri kopiranju v odložišče.");
+        alert("Error copying to clipboard.");
     });
 }
 
 /* ==========================================================================
-   ISKANJE IN FILTRIRANJE
+   SEARCH AND FILTERING
    ========================================================================== */
 
 function getAllExistingLocations() {
@@ -115,14 +166,14 @@ function getAllExistingLocations() {
             });
         }
     });
-    return [...locations].sort((a, b) => a.localeCompare(b, 'sl'));
+    return [...locations].sort((a, b) => a.localeCompare(b, 'en'));
 }
 
 function updateLocationLists() {
     const sortedLocations = getAllExistingLocations();
     const filterSelect = document.getElementById('location-filter');
     if (filterSelect) {
-        filterSelect.innerHTML = '<option value="">-- Vsi kraji --</option>' + 
+        filterSelect.innerHTML = '<option value="">-- All locations --</option>' + 
             sortedLocations.map(loc => `<option value="${loc}">${loc}</option>`).join('');
     }
 
@@ -133,7 +184,7 @@ function updateLocationLists() {
 }
 
 function updateLinkDropdowns() {
-    const sortedMusicians = [...musicians].sort((a, b) => a.name.localeCompare(b.name, 'sl'));
+    const sortedMusicians = [...musicians].sort((a, b) => a.name.localeCompare(b.name, 'en'));
     const options = sortedMusicians.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
     
     const eventSelect = document.getElementById('event-link-select');
@@ -150,21 +201,16 @@ function insertLinkFromDropdown(textareaId, selectId) {
     area.focus();
 }
 
-
-
-// Pomožna funkcija za izris seznama (da ni podvajanja kode)
 function renderMusicianList(data) {
     const listEl = document.getElementById('musician-list');
     listEl.innerHTML = '';
     
-    data.sort((a, b) => a.name.localeCompare(b.name, 'sl')).forEach(m => {
+    data.sort((a, b) => a.name.localeCompare(b.name, 'en')).forEach(m => {
         const li = document.createElement('li');
         
-        // Generiranje začetnic
         const parts = m.name.split(' ');
         const initials = parts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
         
-        // Slog: Amber obroč, Panel (modro-sivo) ozadje, Amber črke
         let avatarHTML = `
             <div class="avatar-circle" style="
                 background-color: var(--panel); 
@@ -179,18 +225,16 @@ function renderMusicianList(data) {
                 ${initials}
             </div>`;
             
-        // Če ima sliko, obdrži sliko z amber obročem
         if (m.img && m.img.trim() !== "") {
-            avatarHTML = `<img src="${m.img}" class="avatar-circle" alt="${m.name}" style="border: 2px solid var(--amber);">`;
+            avatarHTML = `<img src="${escapeHtml(m.img)}" class="avatar-circle" alt="${escapeHtml(m.name)}" style="border: 2px solid var(--amber);">`;
         }
-        
-        li.innerHTML = `${avatarHTML} <span>${m.name} (${m.birth}–${m.death})</span>`;
+
+        li.innerHTML = `${avatarHTML} <span>${escapeHtml(m.name)} (${escapeHtml(m.birth)}–${escapeHtml(m.death)})</span>`;
         li.onclick = () => showMusicianDetails(m.id);
         listEl.appendChild(li);
     });
 }
 
-// Glavna funkcija za iskanje
 function searchMusicians() {
     const filterSelect = document.getElementById('location-filter');
     if (filterSelect) filterSelect.value = "";
@@ -198,13 +242,11 @@ function searchMusicians() {
     const query = document.getElementById('search-input').value.trim().toLowerCase();
     const listEl = document.getElementById('musician-list');
     
-    // 1. Če je prazno, prikaži vse
     if (query === "") {
         renderMusicianList(musicians);
         return;
     }
 
-    // 2. Logika za letnico: Sproži se samo, če je vpisana 4-mestna številka
     const isFourDigitYear = /^\d{4}$/.test(query);
     if (isFourDigitYear) {
         const searchYear = parseInt(query);
@@ -212,38 +254,31 @@ function searchMusicians() {
         return;
     } 
     
-    // 3. Iskanje po imenu (se izvaja vedno, ko ni 4-mestna številka)
     let filtered = musicians.filter(m => m.name.toLowerCase().includes(query));
     
     if (filtered.length === 0) {
-        listEl.innerHTML = '<li style="color:var(--text-muted); cursor:default; border:none; padding: 10px;">Ni zadetkov.</li>';
+        listEl.innerHTML = '<li style="color:var(--text-muted); cursor:default; border:none; padding: 10px;">No matches found.</li>';
     } else {
         renderMusicianList(filtered);
     }
 }
 
-// Avtomatski sprožilec za ime, a ne za letnico (dokler ni dolga 4 znake)
 document.getElementById('search-input').addEventListener('input', (e) => {
     const query = e.target.value.trim();
-    // Če je vpisana 4-mestna številka, avtomatsko sproži iskanje po letu
     if (/^\d{4}$/.test(query)) {
         searchMusicians();
     } else if (!/^\d+$/.test(query)) {
-        // Če ni samo številka (torej vpisuješ ime), sproži sproti
         searchMusicians();
     }
 });
 
-// Avtomatski sprožilec za ime, a ne za letnico (dokler ni dolga 4 znake)
 const searchInput = document.getElementById('search-input');
 if (searchInput) {
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
-        // Če je vpisana 4-mestna številka, avtomatsko sproži iskanje po letu
         if (/^\d{4}$/.test(query)) {
             if (typeof searchMusicians === 'function') searchMusicians();
         } else if (!/^\d+$/.test(query)) {
-            // Če ni samo številka (torej vpisuješ ime), sproži sproti
             if (typeof searchMusicians === 'function') searchMusicians();
         }
     });
@@ -258,7 +293,7 @@ async function filterByYear(targetYear) {
     const cleanTargetYear = typeof parseYear === 'function' ? parseYear(targetYear.toString()) : parseInt(targetYear);
     
     if (!cleanTargetYear) {
-        console.error("Napačen format leta:", targetYear);
+        console.error("Wrong year format:", targetYear);
         return;
     }
 
@@ -279,11 +314,11 @@ async function filterByYear(targetYear) {
         document.getElementById('profile-settings-container').classList.add('hidden');
     }
 
-    nameEl.textContent = `Leto ${cleanTargetYear}`;
-    datesEl.textContent = `Kronološki pregled dogodkov v tem letu`;
+    nameEl.textContent = `Year ${cleanTargetYear}`;
+    datesEl.textContent = `Chronological overview of events in this year`;
     summaryEl.innerHTML = "";
     avatarContainer.innerHTML = ""; 
-    titleEl.textContent = "Zgodovinski dogodki";
+    titleEl.textContent = "Historical events";
     if (addEventBtn) addEventBtn.classList.add('hidden');
 
     let allYearEvents = [];
@@ -306,39 +341,36 @@ async function filterByYear(targetYear) {
         }
     });
 
-    allYearEvents.sort((a, b) => a.musicianName.localeCompare(b.musicianName, 'sl'));
+    allYearEvents.sort((a, b) => a.musicianName.localeCompare(b.musicianName, 'en'));
 
     timelineEl.innerHTML = '';
     if (allYearEvents.length === 0) {
-        timelineEl.innerHTML = `<p style="font-style:italic; color: var(--text-muted);">Ni dogodkov za leto ${cleanTargetYear}.</p>`;
+        timelineEl.innerHTML = `<p style="font-style:italic; color: var(--text-muted);">No events for the year ${cleanTargetYear}.</p>`;
     } else {
         allYearEvents.forEach(item => {
             const div = document.createElement('div');
             div.className = 'timeline-item';
             
-            // Izračun starosti
             let ageHTML = '';
             const birthYear = typeof parseYear === 'function' ? parseYear(item.musicianBirth) : parseInt(item.musicianBirth);
             if (birthYear) {
                 const age = cleanTargetYear - birthYear;
                 if (age >= 0 && age <= 110) {
-                    ageHTML = `<span class="timeline-age">star ${age} let</span>`;
+                    ageHTML = `<span class="timeline-age">${age} years old</span>`;
                 }
             }
 
-            // Izpis kraja – enak kot v navadnem timelinu (z znatko 📍 in brez oklepajev)
-            let locationHTML = item.event.location 
-                ? `<span class="timeline-location" onclick="document.getElementById('location-filter').value='${item.event.location.replace(/'/g, "\\'")}'; filterByLocation('${item.event.location.replace(/'/g, "\\'")}')">📍 ${item.event.location}</span>` 
+            let locationHTML = item.event.location
+                ? `<span class="timeline-location" onclick="document.getElementById('location-filter').value='${escapeHtml(item.event.location).replace(/'/g, "\\'")}'; filterByLocation('${escapeHtml(item.event.location).replace(/'/g, "\\'")}')">\u{1F4CD} ${escapeHtml(item.event.location)}</span>`
                 : '';
 
-            // Sestava glave: odstranjena ponovljena letnica, dodan lep prehod na kraj in starost
             div.innerHTML = `
                 <div class="timeline-header">
-                    <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${item.musicianName}</span>
+                    <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${escapeHtml(item.musicianName)}</span>
                     ${locationHTML}
                     ${ageHTML}
                 </div>
-                <div style="color: #ddd; margin-top: 4px;">${typeof parseWikiLinks === 'function' ? parseWikiLinks(item.event.text) : item.event.text}</div>
+                <div style="color: #ddd; margin-top: 4px;">${typeof parseWikiLinks === 'function' ? parseWikiLinks(escapeHtml(item.event.text)) : escapeHtml(item.event.text)}</div>
             `;
             timelineEl.appendChild(div);
         });
@@ -359,7 +391,7 @@ async function filterByYear(targetYear) {
         if (navPanel) navPanel.style.setProperty('display', 'flex', 'important');
         
         if (journeyContainer.querySelector('h3')) {
-            journeyContainer.querySelector('h3').textContent = `Zemljevid dogodkov v letu ${cleanTargetYear}`;
+            journeyContainer.querySelector('h3').textContent = `Composer's travel map for ${cleanTargetYear}`;
         }
 
         if (mapInstance) {
@@ -373,9 +405,8 @@ async function filterByYear(targetYear) {
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
 
         const bounds = [];
-        const sleep = (ms) => new Promise(r => setTimeout(r, ms)); // Pomožna funkcija za čakanje
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-        // TUKAJ JE KLJUČNA SPREMEMBA: Uporabimo for...of, da lahko asinhrono iščemo manjkajoče lokacije
         for (const item of allYearEvents) {
             const locName = item.event.location;
             if (!locName || locName.trim() === '') continue;
@@ -387,9 +418,8 @@ async function filterByYear(targetYear) {
                 coords = GEO_COORDINATES[cleanLocName];
             }
 
-            // Če koordinat ni v naši bazi, jih poiščemo na spletu
             if (!coords) {
-                await sleep(1200); // Počakamo, da ne preobremenimo API-ja
+                await sleep(1200);
                 try {
                     const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanLocName)}&limit=1`, {
                         headers: { 'User-Agent': 'BaroqueArchiveApp/1.0' }
@@ -398,10 +428,10 @@ async function filterByYear(targetYear) {
                     
                     if (data && data.length > 0) {
                         coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                        GEO_COORDINATES[cleanLocName] = coords; // Shranimo za prihodnja iskanja
+                        GEO_COORDINATES[cleanLocName] = coords;
                     }
                 } catch (err) {
-                    console.error("Napaka pri iskanju kraja za leto:", cleanLocName);
+                    console.error("Error searching for location:", cleanLocName);
                 }
             }
 
@@ -416,7 +446,7 @@ async function filterByYear(targetYear) {
                 });
 
                 const marker = L.marker(coords, { icon: locationIcon }).addTo(mapInstance);
-                marker.bindPopup(`<b style="color: #000;">${item.musicianName}</b><br><span style="color:#333;">${item.event.text}</span>`);
+                marker.bindPopup(`<b style="color: #000;">${escapeHtml(item.musicianName)}</b><br><span style="color:#333;">${escapeHtml(item.event.text)}</span>`);
 
                 mapMarkersArray.push({
                     leafletMarker: marker,
@@ -432,12 +462,12 @@ async function filterByYear(targetYear) {
             
             const statusEl = document.getElementById('map-nav-status');
             if (statusEl) {
-                statusEl.textContent = `Postaja: 1 / ${mapMarkersArray.length}`;
+                statusEl.textContent = `Station: 1 / ${mapMarkersArray.length}`;
             }
             
             updateMapNavDisplay();
         } else {
-            mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Lokacije za leto ${cleanTargetYear} nimajo znanih koordinat.</div>`;
+            mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Locations for the year ${cleanTargetYear} do not have known coordinates.</div>`;
             if (navPanel) navPanel.style.display = 'none';
         }
 
@@ -470,10 +500,10 @@ function filterByLocation(targetLoc) {
     document.getElementById('profile-settings-container').classList.add('hidden');
 
     nameEl.textContent = targetLoc;
-    datesEl.textContent = `Kronološki pregled dogodkov v kraju`;
+    datesEl.textContent = `Chronological overview of events in this location`;
     summaryEl.innerHTML = "";
     avatarContainer.innerHTML = ""; 
-    titleEl.textContent = "Zgodovinski dogodki";
+    titleEl.textContent = "Historical events";
     addEventBtn.classList.add('hidden');
 
     let allLocationEvents = [];
@@ -496,7 +526,7 @@ function filterByLocation(targetLoc) {
 
     timelineEl.innerHTML = '';
     if (allLocationEvents.length === 0) {
-        timelineEl.innerHTML = '<p style="font-style:italic; color: var(--text-muted);">Ni dogodkov za ta kraj.</p>';
+        timelineEl.innerHTML = '<p style="font-style:italic; color: var(--text-muted);">No events for this location.</p>';
     } else {
         allLocationEvents.forEach(item => {
             const div = document.createElement('div');
@@ -508,17 +538,17 @@ function filterByLocation(targetLoc) {
             if (birthYear && eventYear) {
                 const age = eventYear - birthYear;
                 if (age >= 0 && age <= 110) {
-                    ageHTML = `<span class="timeline-age">star ${age} let</span>`;
+                    ageHTML = `<span class="timeline-age">${age} years old</span>`;
                 }
             }
 
             div.innerHTML = `
                 <div class="timeline-header">
-                    <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${item.musicianName}</span>
-                    <span class="timeline-year">${item.event.year || ''}</span>
+                    <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${escapeHtml(item.musicianName)}</span>
+                    <span class="timeline-year">${escapeHtml(item.event.year || '')}</span>
                     ${ageHTML}
                 </div>
-                <div style="color: #ddd; margin-top: 4px;">${parseWikiLinks(item.event.text)}</div>
+                <div style="color: #ddd; margin-top: 4px;">${parseWikiLinks(escapeHtml(item.event.text))}</div>
             `;
             timelineEl.appendChild(div);
         });
@@ -544,19 +574,20 @@ function filterByLocation(targetLoc) {
 function parseWikiLinks(text) {
     if (!text) return '';
     return text.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+        const safeName = escapeHtml(p1);
         const target = musicians.find(m => m.name.toLowerCase().trim() === p1.toLowerCase().trim());
         if (target) {
-            return `<span class="person-link" onclick="showMusicianDetails('${target.id}')">${p1}</span>`;
+            return `<span class="person-link" onclick="showMusicianDetails('${target.id}')">${safeName}</span>`;
         }
-        return `<span style="color: var(--text-muted); border-bottom: 1px dotted #556;">${p1}</span>`;
+        return `<span style="color: var(--text-muted); border-bottom: 1px dotted #556;">${safeName}</span>`;
     });
 }
 
 function generatePureSummary(m) {
     const bYear = parseYear(m.birth) || m.birth;
     const dYear = parseYear(m.death) || m.death;
-    let summary = `<strong>${m.name}</strong> je živel med letoma ${bYear} in ${dYear}. `;
-    
+    let summary = `<strong>${escapeHtml(m.name)}</strong> lived between the years ${escapeHtml(bYear)} and ${escapeHtml(dYear)}. `;
+
     if (m.events && m.events.length > 0) {
         const locations = [...new Set(m.events.map(e => e.location).filter(l => l))];
         const connections = [];
@@ -572,10 +603,10 @@ function generatePureSummary(m) {
         const uniqueConnections = [...new Set(connections)];
 
         if (locations.length > 0) {
-            summary += `Glavne postaje delovanja: ${locations.map(l => `<strong class="timeline-location" onclick="document.getElementById('location-filter').value='${l}'; filterByLocation('${l}')">${l}</strong>`).join(', ')}. `;
+            summary += `Main locations of activity: ${locations.map(l => `<strong class="timeline-location" onclick="document.getElementById('location-filter').value='${escapeHtml(l).replace(/'/g, "\\'")}'; filterByLocation('${escapeHtml(l).replace(/'/g, "\\'")}')">${escapeHtml(l)}</strong>`).join(', ')}. `;
         }
         if (uniqueConnections.length > 0) {
-            summary += `Zabeležene povezave z avtorji: ${uniqueConnections.map(c => `<strong>${c}</strong>`).join(', ')}.`;
+            summary += `Recorded connections with authors: ${uniqueConnections.map(c => `<strong>${escapeHtml(c)}</strong>`).join(', ')}.`;
         }
     }
     return summary;
@@ -592,7 +623,7 @@ function showMusicianDetails(id) {
     document.getElementById('profile-settings-container').classList.remove('hidden');
     document.getElementById('profile-dropdown').classList.remove('prikazi-meni');
     
-    document.getElementById('timeline-title').textContent = "Časovnica";
+    document.getElementById('timeline-title').textContent = "Timeline";
     
     currentMusicianId = id;
     const m = musicians.find(item => item.id === id);
@@ -604,34 +635,31 @@ function showMusicianDetails(id) {
 
     const avatarContainer = document.getElementById('view-avatar-container');
     
-    // Izris avatarja (slika ali začetnice)
     if (m.img && m.img.trim() !== "") {
-        avatarContainer.innerHTML = `<img src="${m.img}" class="avatar-circle avatar-large" alt="${m.name}" style="border: 2px solid var(--amber);">`;
+        avatarContainer.innerHTML = `<img src="${escapeHtml(m.img)}" class="avatar-circle avatar-large" alt="${escapeHtml(m.name)}" style="border: 2px solid var(--amber);">`;
     } else {
         const parts = m.name.split(' ');
         const initials = parts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
-        
+
         avatarContainer.innerHTML = `
             <div class="avatar-circle avatar-large" style="
-                background-color: var(--panel); 
-                color: var(--amber); 
-                display: flex; 
-                align-items: center; 
-                justify-content: center; 
-                font-weight: bold; 
+                background-color: var(--panel);
+                color: var(--amber);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
                 font-size: 2rem;
                 border: 2px solid var(--amber);
             ">
-                ${initials}
+                ${escapeHtml(initials)}
             </div>`;
     }
 
     renderTimeline(m);
     
-    // Prikaz podrobnosti in gumba za vrnitev
     document.getElementById('details-view').classList.remove('hidden');
     
-    // Gumb Nazaj se prikaže samo tukaj, v pogledu podrobnosti
     const backBtn = document.getElementById('back-btn');
     if (backBtn) {
         backBtn.style.display = 'inline-block';
@@ -646,20 +674,15 @@ function showMusicianDetails(id) {
 }
 
 /* ==========================================================================
-   AI EKSTRAKCIJA IN MODALNA OKNA
+   AI EXTRACTION AND MODAL WINDOWS
    ========================================================================== */
-
-
-
-
-
 
 function renderTimeline(musician) {
     const timelineEl = document.getElementById('timeline');
     timelineEl.innerHTML = '';
 
     if (!musician.events || musician.events.length === 0) {
-        timelineEl.innerHTML = '<p style="font-style:italic; color: var(--text-muted);">Ni dogodkov.</p>';
+        timelineEl.innerHTML = '<p style="font-style:italic; color: var(--text-muted);">No events.</p>';
         return;
     }
 
@@ -670,54 +693,145 @@ function renderTimeline(musician) {
         const div = document.createElement('div');
         div.className = 'timeline-item';
         
-        const locHTML = e.location ? `<span class="timeline-location" onclick="document.getElementById('location-filter').value='${e.location}'; filterByLocation('${e.location}')">📍 ${e.location}</span>` : '';
-        
+        const locHTML = e.location ? `<span class="timeline-location" onclick="document.getElementById('location-filter').value='${escapeHtml(e.location).replace(/'/g, "\\'")}'; filterByLocation('${escapeHtml(e.location).replace(/'/g, "\\'")}')">\u{1F4CD} ${escapeHtml(e.location)}</span>` : '';
+
         let ageHTML = '';
         const eventYear = parseYear(e.year);
         if (birthYear && eventYear) {
             const age = eventYear - birthYear;
             if (age >= 0 && age <= 110) {
-                ageHTML = `<span class="timeline-age">star ${age} let</span>`;
+                ageHTML = `<span class="timeline-age">${age} years old</span>`;
             }
         }
-        
+
+        const avtorHTML = (e.vnesIme || e.vnesPriimek)
+            ? `<div class="timeline-vnesel" style="font-size:11px; color:var(--text-muted); margin-top:4px; ${e.vnesUID ? 'cursor:pointer; text-decoration:underline dotted;' : ''}" ${e.vnesUID ? `onclick="prikaziProfilOsebe('${escapeHtml(e.vnesUID)}')"` : ''}>added by: ${escapeHtml(e.vnesIme || '')} ${escapeHtml(e.vnesPriimek || '')}</div>`
+            : '';
+
+        const reviews = e.reviews || {};
+        const stevilke = { check: 0, question: 0, cross: 0 };
+        let mojaOcena = null;
+        Object.keys(reviews).forEach(uid => {
+            const tip = reviews[uid] && reviews[uid].tip;
+            if (stevilke[tip] !== undefined) stevilke[tip]++;
+            if (uid === window.trenutniUporabnikUID) mojaOcena = tip;
+        });
+
+        const stevecHTML = (stevilke.check + stevilke.question + stevilke.cross > 0) ? `
+            <div class="timeline-review-counts" style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                ${stevilke.check ? `✅ ${stevilke.check} ` : ''}${stevilke.question ? `❓ ${stevilke.question} ` : ''}${stevilke.cross ? `🚫 ${stevilke.cross}` : ''}
+            </div>` : '';
+
+        const jeLastnikDogodka = !e.vnesUID || e.vnesUID === window.trenutniUporabnikUID;
+        let akcijeHTML = '';
+        if (jeLastnikDogodka) {
+            akcijeHTML = `
+                <div class="timeline-actions">
+                    <button class="btn-action" onclick="showEventModal(true, ${e.id})" title="Edit">✏️</button>
+                    <button class="btn-action btn-delete" onclick="deleteEvent(${e.id})" title="Delete">❌</button>
+                </div>`;
+        } else {
+            akcijeHTML = `
+                <div class="timeline-actions timeline-review-actions">
+                    <button class="btn-action" style="${mojaOcena === 'check' ? 'opacity:1; transform:scale(1.2);' : 'opacity:0.45;'}" onclick="preklopiOcenoDogodka(${e.id}, 'check')" title="Confirm accuracy">✅</button>
+                    <button class="btn-action" style="${mojaOcena === 'question' ? 'opacity:1; transform:scale(1.2);' : 'opacity:0.45;'}" onclick="preklopiOcenoDogodka(${e.id}, 'question')" title="Questionable">❓</button>
+                    <button class="btn-action" style="${mojaOcena === 'cross' ? 'opacity:1; transform:scale(1.2);' : 'opacity:0.45;'}" onclick="preklopiOcenoDogodka(${e.id}, 'cross')" title="Incorrect">🚫</button>
+                </div>`;
+        }
+
         div.innerHTML = `
             <div class="timeline-header">
-                <span class="timeline-year">${e.year || ''}</span>
+                <span class="timeline-year">${escapeHtml(e.year || '')}</span>
                 ${locHTML}
                 ${ageHTML}
             </div>
-            <div style="color: #ddd;">${parseWikiLinks(e.text)}</div>
-            <div class="timeline-actions">
-                <button class="btn-action" onclick="showEventModal(true, ${e.id})" title="Uredi">✏️</button>
-                <button class="btn-action btn-delete" onclick="deleteEvent(${e.id})" title="Izbriši">❌</button>
-            </div>
+            <div style="color: #ddd;">${parseWikiLinks(escapeHtml(e.text))}</div>
+            ${avtorHTML}
+            ${stevecHTML}
+            ${akcijeHTML}
         `;
         timelineEl.appendChild(div);
     });
 }
 
+function preklopiOcenoDogodka(eventId, tipOcene) {
+    const m = musicians.find(item => item.id === currentMusicianId);
+    if (!m) return;
+    const ev = m.events.find(e => e.id === eventId);
+    if (!ev) return;
+
+    const uid = window.trenutniUporabnikUID;
+    if (!uid) return;
+
+    if (!ev.reviews) ev.reviews = {};
+
+    if (ev.reviews[uid] && ev.reviews[uid].tip === tipOcene) {
+        delete ev.reviews[uid];
+    } else {
+        ev.reviews[uid] = {
+            tip: tipOcene,
+            ime: window.trenutniUporabnikIme || '',
+            priimek: window.trenutniUporabnikPriimek || ''
+        };
+    }
+
+    shraniGlasbenikaVFirestore(m);
+    renderTimeline(m);
+}
+
+async function prikaziProfilOsebe(uid) {
+    if (!uid || !window.db) return;
+    try {
+        const snap = await window.fsGetDoc(window.fsDoc(window.db, 'profiles', uid));
+        if (!snap.exists()) {
+            alert("Profile could not be found.");
+            return;
+        }
+        const p = snap.data();
+
+        const staro = document.getElementById('avtor-profil-modal');
+        if (staro) staro.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'avtor-profil-modal';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); display:flex; justify-content:center; align-items:center; z-index:100001; font-family:sans-serif;';
+        overlay.onclick = function(ev) { if (ev.target === overlay) overlay.remove(); };
+
+        const slikaHTML = p.slika ? `<img src="${p.slika}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; margin-bottom:12px;">` : '';
+
+        overlay.innerHTML = `
+            <div style="background:var(--panel,#141b29); padding:24px; border-radius:16px; max-width:340px; width:90%; color:var(--text,#e8e0d0); border:1px solid var(--border-color,#2a2a35); text-align:center;">
+                ${slikaHTML}
+                <h3 style="margin:0 0 4px 0; color:var(--amber,#f2cc5a);">${p.ime || ''} ${p.priimek || ''}</h3>
+                ${p.instrument ? `<div style="font-size:13px; margin-top:6px;">🎻 ${p.instrument}</div>` : ''}
+                ${p.sola ? `<div style="font-size:13px;">🏛️ ${p.sola}</div>` : ''}
+                ${p.podrocje ? `<div style="font-size:13px;">🔍 ${p.podrocje}</div>` : ''}
+                ${p.email ? `<div style="font-size:13px; margin-top:8px;"><a href="mailto:${p.email}" style="color:var(--amber,#f2cc5a);">✉️ ${p.email}</a></div>` : ''}
+                ${p.web ? `<div style="font-size:13px;"><a href="${p.web}" target="_blank" style="color:var(--amber,#f2cc5a);">🌐 Website</a></div>` : ''}
+                <button onclick="document.getElementById('avtor-profil-modal').remove()" style="margin-top:16px; padding:8px 20px; border:none; border-radius:8px; background:var(--border-color,#2a2a35); color:var(--text,#e8e0d0); cursor:pointer;">Close</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    } catch (err) {
+        console.error("Error loading profile:", err);
+        alert("Error loading the person's profile.");
+    }
+}
+
 function closeDetailsView() {
-    // 1. Skrijemo pogled podrobnosti
     document.getElementById('details-view').classList.add('hidden');
-    
-    // 2. Prikažemo začetni pozdravni napis
     document.getElementById('placeholder-text').classList.remove('hidden');
     
-    // 3. Skrijemo gumb za nazaj
     const backBtn = document.getElementById('back-btn');
     if (backBtn) {
         backBtn.style.display = 'none';
     }
     
-    // 4. Ponastavimo mobilni prikaz (prikažemo seznam, skrijemo vsebino)
     document.getElementById('sidebar').classList.remove('mobilno-skrij');
     document.getElementById('main-content').classList.remove('mobilno-prikaži');
     
-    // 5. Očistimo trenutni ID
     currentMusicianId = null;
 
-    // 6. Očistimo zgodovino, da se ne zgodi dvojno vračanje
     if (history.state && history.state.view === "details") {
         history.back();
     }
@@ -736,7 +850,7 @@ function showAddMusicianForm() {
     const formEl = document.getElementById('add-musician-form');
     formEl.classList.remove('hidden');
 
-    document.getElementById('form-heading').textContent = "Dodaj novo osebo";
+    document.getElementById('form-heading').textContent = "Add new person";
     document.getElementById('new-name').value = "";
     document.getElementById('new-birth').value = "";
     document.getElementById('new-death').value = "";
@@ -755,7 +869,7 @@ function showEditMusicianForm() {
     
     hideAllViews();
     isEditingMusicianMode = true;
-    document.getElementById('form-heading').textContent = "Uredi osebo: " + m.name;
+    document.getElementById('form-heading').textContent = "Edit person: " + m.name;
     document.getElementById('new-name').value = m.name;
     document.getElementById('new-birth').value = m.birth;
     document.getElementById('new-death').value = m.death;
@@ -772,24 +886,34 @@ function saveNewMusician() {
     const death = document.getElementById('new-death').value.trim() || '?';
     const img = document.getElementById('new-image').value.trim();
 
-    if (!name) { alert("Vnesite ime."); return; }
+    if (!name) { alert("Please enter a name."); return; }
 
     if (isEditingMusicianMode) {
         const m = musicians.find(item => item.id === currentMusicianId);
         if (m) {
+            if (m.vnesUID && m.vnesUID !== window.trenutniUporabnikUID) {
+                alert("You can only edit people you added yourself.");
+                return;
+            }
             m.name = name;
             m.birth = birth;
             m.death = death;
             m.img = img;
+            shraniGlasbenikaVFirestore(m);
         }
     } else {
         const newId = generateId(name);
-        const newMusician = { id: newId, name: name, birth: birth, death: death, img: img, events: [] };
+        const newMusician = { 
+            id: newId, name: name, birth: birth, death: death, img: img, events: [],
+            vnesUID: window.trenutniUporabnikUID || null,
+            vnesIme: window.trenutniUporabnikIme || '',
+            vnesPriimek: window.trenutniUporabnikPriimek || ''
+        };
         musicians.push(newMusician);
         currentMusicianId = newId;
+        shraniGlasbenikaVFirestore(newMusician);
     }
 
-    saveToStorage();
     updateLinkDropdowns();
     searchMusicians();
     showMusicianDetails(currentMusicianId);
@@ -813,8 +937,8 @@ function showEventModal(isEdit, eventId = null) {
     
     if (isEdit) {
         editingEventId = eventId;
-        document.getElementById('modal-title').textContent = "Uredi dogodek";
-        document.getElementById('modal-save-btn').textContent = "Shrani";
+        document.getElementById('modal-title').textContent = "Edit event";
+        document.getElementById('modal-save-btn').textContent = "Save";
         document.getElementById('tab-auto').classList.add('hidden');
         
         const m = musicians.find(item => item.id === currentMusicianId);
@@ -826,8 +950,8 @@ function showEventModal(isEdit, eventId = null) {
         }
     } else {
         editingEventId = null;
-        document.getElementById('modal-title').textContent = "Dodaj dogodek";
-        document.getElementById('modal-save-btn').textContent = "Dodaj";
+        document.getElementById('modal-title').textContent = "Add event";
+        document.getElementById('modal-save-btn').textContent = "Add";
         document.getElementById('tab-auto').classList.remove('hidden');
         
         document.getElementById('event-year').value = '';
@@ -867,7 +991,7 @@ function submitEventForm() {
     const year = document.getElementById('event-year').value.trim();
     const location = document.getElementById('event-location').value.trim();
     const text = document.getElementById('event-text').value.trim();
-    if (!text) { alert("Vnesite opis."); return; }
+    if (!text) { alert("Please enter a description."); return; }
 
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
@@ -875,6 +999,10 @@ function submitEventForm() {
     if (editingEventId !== null) {
         const ev = m.events.find(e => e.id === editingEventId);
         if (ev) {
+            if (ev.vnesUID && ev.vnesUID !== window.trenutniUporabnikUID) {
+                alert("You can only edit events you added yourself.");
+                return;
+            }
             ev.year = year;
             ev.location = location;
             ev.text = text;
@@ -885,11 +1013,14 @@ function submitEventForm() {
             id: Date.now(),
             year: year,
             location: location,
-            text: text
+            text: text,
+            vnesUID: window.trenutniUporabnikUID || null,
+            vnesIme: window.trenutniUporabnikIme || '',
+            vnesPriimek: window.trenutniUporabnikPriimek || ''
         });
     }
 
-    saveToStorage();
+    shraniGlasbenikaVFirestore(m);
     updateLocationLists();
     renderTimeline(m);
     document.getElementById('pure-summary').innerHTML = generatePureSummary(m);
@@ -897,15 +1028,20 @@ function submitEventForm() {
 }
 
 function deleteEvent(eventId) {
-    if (confirm("Ali ste prepričani, da želite izbrisati ta dogodek?")) {
-        const m = musicians.find(item => item.id === currentMusicianId);
-        if (m) {
-            m.events = m.events.filter(e => e.id !== eventId);
-            saveToStorage();
-            updateLocationLists();
-            renderTimeline(m);
-            document.getElementById('pure-summary').innerHTML = generatePureSummary(m);
-        }
+    const m = musicians.find(item => item.id === currentMusicianId);
+    if (!m) return;
+    const ev = m.events.find(e => e.id === eventId);
+    if (ev && ev.vnesUID && ev.vnesUID !== window.trenutniUporabnikUID) {
+        alert("You can only delete events you added yourself.");
+        return;
+    }
+
+    if (confirm("Are you sure you want to delete this event?")) {
+        m.events = m.events.filter(e => e.id !== eventId);
+        shraniGlasbenikaVFirestore(m);
+        updateLocationLists();
+        renderTimeline(m);
+        document.getElementById('pure-summary').innerHTML = generatePureSummary(m);
     }
 }
 
@@ -913,7 +1049,7 @@ function exportDatabase() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(musicians, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", "arhiv_skladateljev_backup.json");
+    downloadAnchor.setAttribute("download", "archive_composers_backup.json");
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -924,21 +1060,23 @@ function importDatabase(event) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
             const importedData = JSON.parse(e.target.result);
             if (Array.isArray(importedData)) {
-                if (confirm("Ali želite zamenjati TRENUTNO bazo z naloženo varnostno kopijo celotne baze?")) {
+                if (confirm("Do you want to replace the CURRENT database with the uploaded full database backup? (Old entries not in the file will remain in the shared database.)")) {
                     musicians = importedData;
-                    saveToStorage();
+                    for (const m of musicians) {
+                        await shraniGlasbenikaVFirestore(m);
+                    }
                     searchMusicians();
                     updateLocationLists();
                     updateLinkDropdowns();
                     closeDetailsView();
-                    alert("Celotna baza uspešno uvožena!");
+                    alert("Entire database successfully imported!");
                 }
             } else if (importedData && typeof importedData === 'object' && importedData.name) {
-                if (confirm(`Ali želite v bazo uvoziti/posodobiti skladatelja "${importedData.name}"?`)) {
+                if (confirm(`Do you want to import/update the composer "${importedData.name}"?`)) {
                     if (!importedData.id) {
                         importedData.id = Date.now().toString();
                     } else {
@@ -951,22 +1089,22 @@ function importDatabase(event) {
                     } else {
                         musicians.push(importedData);
                     }
-                    
-                    saveToStorage();
+
+                    await shraniGlasbenikaVFirestore(importedData);
                     searchMusicians();
                     updateLocationLists();
                     updateLinkDropdowns();
                     
                     currentMusicianId = importedData.id;
                     showMusicianDetails(importedData.id);
-                    alert(`Skladatelj "${importedData.name}" uspešno uvožen in naložen!`);
+                    alert(`Composer "${importedData.name}" successfully imported and loaded!`);
                 }
             } else {
-                alert("Napaka: Datoteka nima pravilne strukture.");
+                alert("Error: The file does not have the correct structure.");
             }
         } catch (err) {
             console.error(err);
-            alert("Napaka pri branju datoteke.");
+            alert("Error reading the file.");
         }
         event.target.value = '';
     };
@@ -978,7 +1116,7 @@ function mergeMusicianPrompt() {
     const sourceMusician = musicians.find(m => m.id === currentId);
     
     if (!sourceMusician) {
-        alert("Napaka: Ni mogoče najti trenutnega skladatelja.");
+        alert("Error: Cannot find the current composer.");
         return;
     }
 
@@ -992,15 +1130,15 @@ function mergeMusicianPrompt() {
     if (tabsEl) tabsEl.classList.add('hidden');
     
     document.getElementById('modal-merge-view').classList.remove('hidden');
-    document.getElementById('merge-label-current').textContent = `${sourceMusician.name} (Obdrži trenutnega)`;
-    document.getElementById('merge-label-target').textContent = `Izbrani duplikat iz spodnjega seznama`;
+    document.getElementById('merge-label-current').textContent = `${escapeHtml(sourceMusician.name)} (Keep current)`;
+    document.getElementById('merge-label-target').textContent = `Selected duplicate from the list below`;
 
     const selectEl = document.getElementById('merge-target-select');
-    selectEl.innerHTML = '<option value="">-- izberi skladatelja za združitev --</option>';
-    
+    selectEl.innerHTML = '<option value="">-- select composer to merge --</option>';
+
     musicians.forEach(m => {
         if (m.id !== sourceMusician.id) {
-            selectEl.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+            selectEl.innerHTML += `<option value="${m.id}">${escapeHtml(m.name)}</option>`;
         }
     });
 
@@ -1013,13 +1151,13 @@ function executeMusicianMerge() {
     const targetId = targetSelect.value;
 
     if (!targetId) {
-        alert("Prosim, izberite skladatelja, s katerim želite združiti trenutnega.");
+        alert("Please select a composer to merge with the current one.");
         return;
     }
 
     const targetMusician = musicians.find(m => m.id === targetId);
     if (!sourceMusician || !targetMusician) {
-        alert("Napaka pri branju podatkov skladateljev.");
+        alert("Error reading composer data.");
         return;
     }
 
@@ -1033,7 +1171,7 @@ function executeMusicianMerge() {
         duplicateMusician = sourceMusician;
     }
 
-    if (!confirm(`Ali ste prepričani, da želite združiti vse dogodke pod profil "${mainMusician.name}"? Profil "${duplicateMusician.name}" bo trajno izbrisan.`)) {
+    if (!confirm(`Are you sure you want to merge all events under the profile "${mainMusician.name}"? The profile "${duplicateMusician.name}" will be permanently deleted.`)) {
         return;
     }
 
@@ -1045,9 +1183,10 @@ function executeMusicianMerge() {
     mainMusician.events.sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
     musicians = musicians.filter(m => m.id !== duplicateMusician.id);
 
-    saveToStorage();
+    shraniGlasbenikaVFirestore(mainMusician);
+    izbrisiGlasbenikaIzFirestore(duplicateMusician.id);
     hideEventModal();
 
-    alert(`Uspešno združeno! Duplikat (${duplicateMusician.name}) je izbrisan.`);
+    alert(`Merge successful! Duplicate (${duplicateMusician.name}) has been deleted.`);
     showMusicianDetails(mainMusician.id);
 }

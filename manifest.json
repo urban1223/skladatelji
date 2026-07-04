@@ -1,7 +1,7 @@
 {
-  "name": "Časovnice skladateljev Nova akademija",
-  "short_name": "Časovnice skladateljev",
-  "description": "Časovnice in potovalni diagrami baročnih glasbenikov",
+  "name": "Baroque Composer Timelines | Nova akademija",
+  "short_name": "Baroque Timelines",
+  "description": "Interactive timelines and travel diagrams of Baroque musicians.",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#111827",

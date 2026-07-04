@@ -1,5 +1,5 @@
 /* ==========================================================================
-   AI EKSTRAKCIJA IN MODALNA OKNA
+   AI EXTRACTION AND MODAL WINDOWS
    ========================================================================== */
 
 let editingEventId = null;
@@ -9,33 +9,33 @@ async function extractEventsWithGemini() {
     const apiKey = document.getElementById('gemini-api-key').value.trim();
     const text = document.getElementById('raw-bio-input').value.trim();
 
-    if (!apiKey) { alert("Prosim, vnesite svoj Google Gemini API ključ."); return; }
-    if (!text) { alert("Prilepite besedilo za analizo."); return; }
+    if (!apiKey) { alert("Please enter your Google Gemini API key."); return; }
+    if (!text) { alert("Paste the text to analyze."); return; }
 
     const btn = document.getElementById('ai-analyze-btn');
-    btn.textContent = "AI razmišlja in preureja stavke...";
+    btn.textContent = "AI is thinking and rearranging sentences...";
     btn.disabled = true;
 
     const existingLocs = getAllExistingLocations();
 
-    const prompt = `Danes deluješ kot strokovni zgodovinski asistent za ekstrakcijo podatkov. 
-Iz naslednjega zgodovinskega besedila izlušči dogodke in dela ter jih vrni v strogi JSON strukturi.
+    const prompt = `You are acting as a professional historical research assistant for data extraction.
+From the following historical text, extract events and works and return them in a strict JSON structure.
 
-ZAHTEVANA PRAVILA ZA AI EKSTRAKCIJO:
-JEZIK: Vsi opisi dogodkov morajo biti VEDNO v slovenščini. Prevedi smiselno, strokovno in jedrnato. Slog naj bo deskriptiven (npr. "Zaposlitev kot organist na dvoru", "Izid zbirke madrigalov", "Rojstvo", "Smrt"). Nakoncu vsakega opisa je VEDNO pika.
+REQUIRED RULES FOR AI EXTRACTION:
+LANGUAGE: All event descriptions must ALWAYS be in English. Translate meaningfully, professionally, and concisely. The style should be descriptive (e.g. "Appointment as court organist", "Publication of a madrigal collection", "Birth", "Death"). Each description must ALWAYS end with a period.
 
-LOKACIJA (KRAJ): Vedno identificiraj geografsko lokacijo. Uporabljaj slovenski imenovalnik (npr. "Gradec", "Benetke", "Dunaj", "Rim"). Če lokacije ni mogoče zaznati, vrni prazen niz "".
+LOCATION: Always identify the geographic location. Use the standard English name of the place (e.g. "Graz", "Venice", "Vienna", "Rome"). If no location can be detected, return an empty string "".
 
-USKLAJENOST KRAJEV: Uporabi uveljavljena slovenska imena za mesta. Za usklajevanje z obstoječimi lokacijami v bazi uporabi standardizirana poimenovanja.
+LOCATION CONSISTENCY: Use established English place names. To stay consistent with existing locations in the database, use standardized naming.
 
-FILTRIRANJE: Ignoriraj tehnične oznake (BWV, RV, Op.), razen če so del naslova zbirke, ki jo je smiselno ohraniti.
+FILTERING: Ignore technical catalogue numbers (BWV, RV, Op.), unless they are part of a collection title worth keeping.
 
-FORMAT ODGOVORA: Odgovor vrni STRIKTNO kot veljaven JSON array objekt. Brez kakršnihkoli uvodnih besed, brez oznak brez zaključnih besed.
+RESPONSE FORMAT: Return the response STRICTLY as a valid JSON array object. No introductory text, no labels, no closing remarks.
 
-Format mora biti natančno tak:
-[{"year": "Letnica", "location": "Kraj", "text": "Kratek in jedrnat opis v slovenščini s piko na koncu."}]
+The format must be exactly this:
+[{"year": "Year", "location": "Place", "text": "Short, concise description in English ending with a period."}]
 
-Besedilo za analizo:
+Text to analyze:
 ${text}`;
 
     try {
@@ -48,7 +48,7 @@ ${text}`;
         const data = await response.json();
         
         if (!data.candidates || !data.candidates[0]) {
-            throw new Error("API ni vrnil veljavnih podatkov. Preveri API ključ.");
+            throw new Error("The API did not return valid data. Check your API key.");
         }
 
         let aiTextResponse = data.candidates[0].content.parts[0].text.trim();
@@ -59,9 +59,9 @@ ${text}`;
 
     } catch (error) {
         console.error(error);
-        alert("Prišlo je do napake pri komunikaciji z AI ali obdelavi podatkov. Preverite ključ in poskusite ponovno.");
+        alert("An error occurred while communicating with the AI or processing the data. Check your key and try again.");
     } finally {
-        btn.textContent = "✨ Preuredi in analiziraj z AI";
+        btn.textContent = "✨ Rearrange and analyze with AI";
         btn.disabled = false;
     }
 }
@@ -72,7 +72,7 @@ function displayExtractedRows(events) {
     listEl.innerHTML = '';
 
     if(!Array.isArray(events) || events.length === 0) {
-        listEl.innerHTML = '<p style="font-style:italic; color:var(--text-muted); font-size:13px;">AI ni uspel izluščiti dogodkov.</p>';
+        listEl.innerHTML = '<p style="font-style:italic; color:var(--text-muted); font-size:13px;">The AI was unable to extract any events.</p>';
         document.getElementById('save-extracted-btn').classList.add('hidden');
     } else {
         events.sort((a,b) => (parseYear(a.year) || 0) - (parseYear(b.year) || 0));
@@ -82,9 +82,9 @@ function displayExtractedRows(events) {
             row.className = 'extracted-row';
             row.innerHTML = `
                 <input type="checkbox" id="ext-check-${idx}" checked style="width:auto; margin-right:4px;">
-                <input type="text" id="ext-year-${idx}" value="${ev.year || ''}" style="width:60px; text-align:center; font-weight:bold; color:var(--amber);">
-                <input type="text" id="ext-loc-${idx}" value="${ev.location || ''}" placeholder="Kraj" style="width:100px;">
-                <input type="text" id="ext-text-${idx}" value="${ev.text || ''}" style="flex:1;">
+                <input type="text" id="ext-year-${idx}" value="${escapeHtml(ev.year || '')}" style="width:60px; text-align:center; font-weight:bold; color:var(--amber);">
+                <input type="text" id="ext-loc-${idx}" value="${escapeHtml(ev.location || '')}" placeholder="Location" style="width:100px;">
+                <input type="text" id="ext-text-${idx}" value="${escapeHtml(ev.text || '')}" style="flex:1;">
             `;
             listEl.appendChild(row);
         });
@@ -113,7 +113,10 @@ function saveCheckedExtractedEvents() {
                     id: Date.now() + i,
                     year: year,
                     location: location,
-                    text: text
+                    text: text,
+                    vnesUID: window.trenutniUporabnikUID || null,
+                    vnesIme: window.trenutniUporabnikIme || '',
+                    vnesPriimek: window.trenutniUporabnikPriimek || ''
                 });
                 importCount++;
             }
@@ -121,14 +124,14 @@ function saveCheckedExtractedEvents() {
     }
 
     if(importCount > 0) {
-        saveToStorage();
+        shraniGlasbenikaVFirestore(m);
         updateLocationLists();
         renderTimeline(m);
         document.getElementById('pure-summary').innerHTML = generatePureSummary(m);
-        alert(`Uspešno preurejenih in uvoženih ${importCount} dogodkov!`);
+        alert(`Successfully rearranged and imported ${importCount} events!`);
         hideEventModal();
     } else {
-        alert("Noben dogodek ni bil izbran.");
+        alert("No event was selected.");
     }
 }
 

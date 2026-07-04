@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only authenticated users can access
+    match /musicians/{musicianId} {
+      // Read: any authenticated user can read musicians
+      allow read: if request.auth != null;
+
+      // Create: any authenticated user can create new musicians
+      allow create: if request.auth != null &&
+                       request.resource.data.vnesUID == request.auth.uid;
+
+      // Update: only the creator (vnesUID) can update
+      allow update: if request.auth != null &&
+                       resource.data.vnesUID == request.auth.uid;
+
+      // Delete: only the creator can delete
+      allow delete: if request.auth != null &&
+                       resource.data.vnesUID == request.auth.uid;
+    }
+
+    match /profiles/{userId} {
+      // Read: own profile or any user for display
+      allow read: if request.auth != null;
+
+      // Create/Update: only own profile
+      allow create, update: if request.auth != null &&
+                              request.auth.uid == userId;
+
+      // Delete: only own profile
+      allow delete: if request.auth != null &&
+                       request.auth.uid == userId;
+    }
+  }
+}
