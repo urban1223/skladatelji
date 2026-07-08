@@ -21,19 +21,53 @@ window.onload = function() {
         }
     });
 
-    // CATCH SYSTEM "BACK" BUTTON
+    function showHomeScreen() {
+        if (document.getElementById('details-view')) document.getElementById('details-view').classList.add('hidden');
+        if (document.getElementById('add-musician-form')) document.getElementById('add-musician-form').classList.add('hidden');
+        if (document.getElementById('add-global-event-form')) document.getElementById('add-global-event-form').classList.add('hidden');
+        if (document.getElementById('placeholder-text')) document.getElementById('placeholder-text').classList.remove('hidden');
+        if (document.getElementById('back-btn')) document.getElementById('back-btn').style.display = 'none';
+        if (document.getElementById('sidebar')) document.getElementById('sidebar').classList.remove('mobilno-skrij');
+        if (document.getElementById('main-content')) document.getElementById('main-content').classList.remove('mobilno-prikaži');
+        currentMusicianId = null;
+    }
+
+    // EXIT GUARD: mark the very first history entry as "home" and add one buffer
+    // entry ("home-guard") on top of it. Pressing system/browser Back always has
+    // at least this one extra step to consume before it would truly leave the
+    // app, which gives us a chance to ask for confirmation instead of the user
+    // being kicked out unexpectedly.
+    history.replaceState({ view: 'home' }, '');
+    history.pushState({ view: 'home-guard' }, '');
+
+    // CATCH SYSTEM "BACK" BUTTON — restore whichever view (musician/year/location) was
+    // previously open, or fall back to the empty placeholder when the stack is exhausted.
+    // The `false` argument tells each show-function not to push a new history entry,
+    // otherwise navigating back would itself add a forward entry and break the stack.
     window.addEventListener('popstate', function(event) {
-        if (!event.state || event.state.view !== "details") {
-            // Use internal close function without calling history.back() again
-            // Therefore, closeDetailsView must not contain history.back() call
-            if (document.getElementById('details-view')) document.getElementById('details-view').classList.add('hidden');
-            if (document.getElementById('placeholder-text')) document.getElementById('placeholder-text').classList.remove('hidden');
-            if (document.getElementById('back-btn')) document.getElementById('back-btn').style.display = 'none';
-            if (document.getElementById('sidebar')) document.getElementById('sidebar').classList.remove('mobilno-skrij');
-            if (document.getElementById('main-content')) document.getElementById('main-content').classList.remove('mobilno-prikaži');
-            currentMusicianId = null;
-        } else if (event.state && event.state.view === "details" && event.state.id) {
-            if (typeof showMusicianDetails === 'function') showMusicianDetails(event.state.id);
+        const state = event.state;
+
+        if (state && state.view === "musician" && state.id) {
+            if (typeof showMusicianDetails === 'function') showMusicianDetails(state.id, false);
+        } else if (state && state.view === "year" && state.year) {
+            if (typeof filterByYear === 'function') filterByYear(state.year, false);
+        } else if (state && state.view === "location" && state.location) {
+            if (typeof filterByLocation === 'function') filterByLocation(state.location, false);
+        } else if (state && state.view === "home-guard") {
+            // Still inside our safety buffer — just show the empty screen, no prompt yet.
+            showHomeScreen();
+        } else if (state && state.view === "home") {
+            // The buffer was just consumed: one more Back would really exit the app.
+            showHomeScreen();
+            const wantsToLeave = confirm("Do you want to leave the app?");
+            if (wantsToLeave) {
+                history.back();
+            } else {
+                history.pushState({ view: 'home-guard' }, ''); // re-arm the buffer
+            }
+        } else {
+            // Fallback for any unrecognized/legacy state
+            showHomeScreen();
         }
     });
 

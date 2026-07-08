@@ -63,5 +63,213 @@ const initialComposerData = [
             { "year": "1574", "location": "Rome", "text": "Being elevated to a Knight of the Golden Spur by Pope Gregory XIII." },
             { "year": "1594", "location": "Munich", "text": "Death." }
         ]
+    },
+    {
+        "id": "giovanni-palestrina",
+        "name": "Giovanni Pierluigi da Palestrina",
+        "birth": "1525",
+        "death": "1594",
+        "img": "",
+        "events": [
+            { "year": "1525", "location": "Palestrina", "text": "Birth in the town of Palestrina, near Rome." },
+            { "year": "1540", "location": "Rome", "text": "Arrival in Rome to study music." },
+            { "year": "1544", "location": "Rome", "text": "Appointment as maestro di cappella at the Basilica of San Giovanni in Laterano." },
+            { "year": "1551", "location": "Rome", "text": "Appointment as maestro di cappella at St. Peter's Basilica." },
+            { "year": "1555", "location": "Rome", "text": "Brief membership in the Papal Chapel choir." },
+            { "year": "1555", "location": "Rome", "text": "Composition of the 'Missa Papae Marcelli,' a pivotal work in sacred music reform." },
+            { "year": "1560", "location": "Rome", "text": "Reappointment as maestro di cappella at St. Peter's Basilica." },
+            { "year": "1565", "location": "Rome", "text": "Publication of his first book of masses, establishing him as a leading sacred composer." },
+            { "year": "1568", "location": "Rome", "text": "Correspondence with [[Orlande de Lassus]] regarding compositional techniques." },
+            { "year": "1570", "location": "Rome", "text": "Publication of the Canticum Canticorum and motets." },
+            { "year": "1575", "location": "Rome", "text": "Reappointment as maestro di cappella of the Papal Chapel." },
+            { "year": "1578", "location": "Rome", "text": "Mentoring of young [[Tomás Luis de Victoria]] during his studies in Rome." },
+            { "year": "1580", "location": "Rome", "text": "Publication of nine volumes of motets." },
+            { "year": "1585", "location": "Rome", "text": "Recognition by Pope Sixtus V as the greatest living composer." },
+            { "year": "1590", "location": "Rome", "text": "Premiere of the mass cycle with [[Girolamo Frescobaldi]] at St. Peter's." },
+            { "year": "1594", "location": "Rome", "text": "Death in Rome after a lifetime of service to the Church." }
+        ]
+    },
+    {
+        "id": "tomas-luis-victoria",
+        "name": "Tomás Luis de Victoria",
+        "birth": "1548",
+        "death": "1611",
+        "img": "",
+        "events": [
+            { "year": "1548", "location": "Avila", "text": "Birth in Avila, Spain." },
+            { "year": "1565", "location": "Rome", "text": "Arrival in Rome to study music." },
+            { "year": "1568", "location": "Rome", "text": "Instruction under [[Giovanni Palestrina]] at St. Peter's Basilica." },
+            { "year": "1569", "location": "Rome", "text": "Ordination as a priest." },
+            { "year": "1572", "location": "Rome", "text": "Publication of his first motets." },
+            { "year": "1575", "location": "Rome", "text": "Appointment as maestro di cappella of the German College in Rome." },
+            { "year": "1577", "location": "Rome", "text": "Publication of the famous 'O vos omnes,' a motet of profound emotional depth." },
+            { "year": "1580", "location": "Rome", "text": "Collaboration with [[Palestrina]] on the revision of liturgical music." },
+            { "year": "1585", "location": "Madrid", "text": "Return to Spain and appointment as chaplain to the Dowager Empress." },
+            { "year": "1590", "location": "Madrid", "text": "Publication of his complete masses." },
+            { "year": "1600", "location": "Madrid", "text": "Recognition as Spain's greatest composer, corresponding with [[Girolamo Frescobaldi]]." },
+            { "year": "1605", "location": "Madrid", "text": "Publication of the 'Officium Defunctorum,' commemorating the death of the Empress." },
+            { "year": "1611", "location": "Madrid", "text": "Death in Madrid." }
+        ]
+    },
+    {
+        "id": "william-byrd",
+        "name": "William Byrd",
+        "birth": "1540",
+        "death": "1623",
+        "img": "",
+        "events": [
+            { "year": "1540", "location": "London", "text": "Birth in England." },
+            { "year": "1559", "location": "Lincoln", "text": "Appointment as organist at Lincoln Cathedral." },
+            { "year": "1563", "location": "London", "text": "Appointment as organist at St. Paul's Cathedral." },
+            { "year": "1568", "location": "London", "text": "Contemporary of [[Orlande de Lassus]], known across Europe for his motets." },
+            { "year": "1570", "location": "London", "text": "Appointment as Gentleman of the Chapel Royal alongside [[Orlando Gibbons]]." },
+            { "year": "1575", "location": "London", "text": "Publication of the 'Cantiones Sacrae' with [[Orlando Gibbons]]." },
+            { "year": "1580", "location": "London", "text": "Publication of masses for Catholic worship." },
+            { "year": "1588", "location": "London", "text": "Composition of ceremonial music at the time of the Spanish Armada." },
+            { "year": "1590", "location": "London", "text": "Publication of three masses of unprecedented complexity." },
+            { "year": "1595", "location": "London", "text": "Publication of the 'Cantiones Sacrae' second volume." },
+            { "year": "1605", "location": "London", "text": "Publication of the 'Gradualia,' a comprehensive liturgical work." },
+            { "year": "1620", "location": "London", "text": "Recognition as one of the greatest composers ever to live." },
+            { "year": "1623", "location": "London", "text": "Death in London, mourned as England's supreme musical master." }
+        ]
+    },
+    {
+        "id": "giovanni-gabrieli",
+        "name": "Giovanni Gabrieli",
+        "birth": "1555",
+        "death": "1612",
+        "img": "",
+        "events": [
+            { "year": "1555", "location": "Venice", "text": "Birth in Venice." },
+            { "year": "1570", "location": "Venice", "text": "Appointment as assistant to his uncle Andrea Gabrieli at St. Mark's Basilica." },
+            { "year": "1575", "location": "Munich", "text": "Travel to Munich to study with [[Orlande de Lassus]] at the court." },
+            { "year": "1577", "location": "Venice", "text": "Return to Venice and assistant organist at St. Mark's." },
+            { "year": "1580", "location": "Venice", "text": "Publication of motets and instrumental works." },
+            { "year": "1585", "location": "Venice", "text": "Succession to his uncle's position as maestro di cappella." },
+            { "year": "1590", "location": "Venice", "text": "Composition of monumental canzoni for multiple choirs." },
+            { "year": "1595", "location": "Venice", "text": "Publication of the 'Sacrae Symphoniae' with works combining voices and instruments." },
+            { "year": "1600", "location": "Venice", "text": "Mentorship of the young [[Claudio Monteverdi]]." },
+            { "year": "1605", "location": "Venice", "text": "Publication of the second volume of 'Sacrae Symphoniae.'" },
+            { "year": "1610", "location": "Venice", "text": "Establishment of a new musical style with polychoral writing, influencing [[Claudio Monteverdi]]." },
+            { "year": "1612", "location": "Venice", "text": "Death in Venice, leaving behind a revolutionary approach to sacred music." }
+        ]
+    },
+    {
+        "id": "carlo-gesualdo",
+        "name": "Carlo Gesualdo da Venosa",
+        "birth": "1561",
+        "death": "1613",
+        "img": "",
+        "events": [
+            { "year": "1561", "location": "Naples", "text": "Birth of Carlo Gesualdo, Prince of Venosa, in Naples." },
+            { "year": "1580", "location": "Naples", "text": "Early compositions of madrigals showing innovative harmonic language." },
+            { "year": "1586", "location": "Ferrara", "text": "Travel to Ferrara, center of avant-garde music, to study contemporary styles." },
+            { "year": "1590", "location": "Ferrara", "text": "Correspondence with [[Luca Marenzio]] regarding harmonic innovations." },
+            { "year": "1594", "location": "Naples", "text": "Publication of his first five books of madrigals, shocking audiences with chromatic harmony." },
+            { "year": "1596", "location": "Naples", "text": "Marriage to Leonora d'Este, enhancing his court position." },
+            { "year": "1600", "location": "Naples", "text": "Composition of sacred music reflecting his experimental approach." },
+            { "year": "1605", "location": "Naples", "text": "Publication of six-voice motets and responsories." },
+            { "year": "1610", "location": "Naples", "text": "Late madrigals published, showing extreme chromaticism and dissonance." },
+            { "year": "1613", "location": "Naples", "text": "Death in Naples, remembered as a bold harmonic innovator ahead of his time." }
+        ]
+    },
+    {
+        "id": "claudio-monteverdi",
+        "name": "Claudio Monteverdi",
+        "birth": "1567",
+        "death": "1643",
+        "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Claudio_Monteverdi_1597.jpg/440px-Claudio_Monteverdi_1597.jpg",
+        "events": [
+            { "year": "1567", "location": "Cremona", "text": "Birth in Cremona, Italy." },
+            { "year": "1580", "location": "Cremona", "text": "Training under Marc'Antonio Ingegneri." },
+            { "year": "1587", "location": "Mantua", "text": "Appointment as a musician at the court of Duke Guglielmo Gonzaga." },
+            { "year": "1590", "location": "Mantua", "text": "Study of [[Giovanni Gabrieli]]'s revolutionary polychoral style." },
+            { "year": "1595", "location": "Mantua", "text": "Promotion to master of music at the court, alongside [[Giovanni Gabrieli]]'s influence." },
+            { "year": "1599", "location": "Mantua", "text": "Performance of his opera 'L'Arianna' in preliminary form." },
+            { "year": "1601", "location": "Mantua", "text": "Publication of the madrigal collection that revolutionizes secular music." },
+            { "year": "1605", "location": "Mantua", "text": "Composition of church music combining [[Giovanni Gabrieli]]'s polychoral approach with new styles." },
+            { "year": "1607", "location": "Mantua", "text": "Premiere of 'L'Arianna,' establishing opera as a major art form." },
+            { "year": "1613", "location": "Venice", "text": "Appointment as maestro di cappella at St. Mark's Basilica in Venice." },
+            { "year": "1620", "location": "Venice", "text": "Publication of the 'Seventh Book of Madrigals,' works of extraordinary expressive power." },
+            { "year": "1630", "location": "Venice", "text": "Composition of the 'Selva Morale e Spirituale,' sacred works of profound innovation." },
+            { "year": "1643", "location": "Venice", "text": "Death in Venice, recognized as one of the greatest composers in history." }
+        ]
+    },
+    {
+        "id": "luca-marenzio",
+        "name": "Luca Marenzio",
+        "birth": "1553",
+        "death": "1599",
+        "img": "",
+        "events": [
+            { "year": "1553", "location": "Coccaglio", "text": "Birth near Brescia in northern Italy." },
+            { "year": "1575", "location": "Rome", "text": "Arrival in Rome, becoming a leading madrigalist in the papal court." },
+            { "year": "1577", "location": "Rome", "text": "Publication of his first madrigal collections, establishing his reputation." },
+            { "year": "1580", "location": "Rome", "text": "Service under Cardinal Luigi d'Este, alongside [[Giovanni Palestrina]]." },
+            { "year": "1584", "location": "Ferrara", "text": "Travel to Ferrara, where he meets [[Carlo Gesualdo]] and exchanges musical ideas." },
+            { "year": "1590", "location": "Rome", "text": "Publication of five-voice madrigals of extraordinary refinement." },
+            { "year": "1592", "location": "Warsaw", "text": "Invitation to Poland at the court of Sigismund III." },
+            { "year": "1594", "location": "Rome", "text": "Return to Rome, continuing as the most celebrated madrigalist in Europe." },
+            { "year": "1596", "location": "Rome", "text": "Composition of ceremonial music for papal functions with [[Giovanni Palestrina]]'s influence." },
+            { "year": "1599", "location": "Rome", "text": "Death in Rome; mourned as one of the greatest madrigal composers." }
+        ]
+    },
+    {
+        "id": "jan-sweelinck",
+        "name": "Jan Pieterszoon Sweelinck",
+        "birth": "1562",
+        "death": "1621",
+        "img": "",
+        "events": [
+            { "year": "1562", "location": "Amsterdam", "text": "Birth in Amsterdam, Netherlands." },
+            { "year": "1577", "location": "Amsterdam", "text": "Appointment as organist at the Old Church (Oude Kerk) in Amsterdam." },
+            { "year": "1584", "location": "Amsterdam", "text": "Travel to Venice to study with [[Giovanni Gabrieli]]." },
+            { "year": "1586", "location": "Amsterdam", "text": "Return to Amsterdam, bringing Gabrieli's polychoral style to northern Europe." },
+            { "year": "1590", "location": "Amsterdam", "text": "Composition of keyboard fantasias and psalm settings." },
+            { "year": "1600", "location": "Amsterdam", "text": "Publication of psalm settings for two choirs." },
+            { "year": "1605", "location": "Amsterdam", "text": "Mentorship of [[Orlando Gibbons]] during his visit from England." },
+            { "year": "1610", "location": "Amsterdam", "text": "Publication of the 'Cantiones Sacrae' demonstrating northern baroque style." },
+            { "year": "1615", "location": "Amsterdam", "text": "Reputation as the greatest organist in northern Europe." },
+            { "year": "1621", "location": "Amsterdam", "text": "Death in Amsterdam, leaving behind a revolutionary keyboard repertoire." }
+        ]
+    },
+    {
+        "id": "girolamo-frescobaldi",
+        "name": "Girolamo Frescobaldi",
+        "birth": "1583",
+        "death": "1643",
+        "img": "",
+        "events": [
+            { "year": "1583", "location": "Ferrara", "text": "Birth in Ferrara, Italy." },
+            { "year": "1600", "location": "Rome", "text": "Arrival in Rome to study with [[Giovanni Pierluigi da Palestrina]]." },
+            { "year": "1603", "location": "Rome", "text": "Appointment as organist at St. Peter's Basilica." },
+            { "year": "1605", "location": "Rome", "text": "Publication of the 'Toccate e partite' for keyboard, revolutionary works." },
+            { "year": "1608", "location": "Florence", "text": "Brief service at the court of the Medici family." },
+            { "year": "1610", "location": "Rome", "text": "Return to St. Peter's Basilica as maestro d'organo." },
+            { "year": "1615", "location": "Rome", "text": "Correspondence with [[Claudio Monteverdi]] regarding the new expressive style." },
+            { "year": "1620", "location": "Rome", "text": "Publication of sacred vocal works influenced by [[Giovanni Gabrieli]]." },
+            { "year": "1630", "location": "Rome", "text": "Continued publication of keyboard works of extraordinary complexity." },
+            { "year": "1643", "location": "Rome", "text": "Death in Rome; recognized as the greatest keyboard virtuoso of his age." }
+        ]
+    },
+    {
+        "id": "orlando-gibbons",
+        "name": "Orlando Gibbons",
+        "birth": "1583",
+        "death": "1625",
+        "img": "",
+        "events": [
+            { "year": "1583", "location": "Oxford", "text": "Birth in Oxford, England." },
+            { "year": "1599", "location": "Cambridge", "text": "Training at King's College, Cambridge." },
+            { "year": "1603", "location": "London", "text": "Appointment as organist at the Chapel Royal." },
+            { "year": "1605", "location": "London", "text": "Study of [[Jan Pieterszoon Sweelinck]]'s keyboard works through correspondence." },
+            { "year": "1608", "location": "London", "text": "Publication of his first anthems and keyboard works." },
+            { "year": "1610", "location": "London", "text": "Promotion to one of the leading composers at the Chapel Royal, alongside [[William Byrd]]." },
+            { "year": "1615", "location": "London", "text": "Appointment as virginals teacher to the royal children." },
+            { "year": "1618", "location": "London", "text": "Publication of the 'Parthenia,' keyboard works of supreme artistry." },
+            { "year": "1620", "location": "London", "text": "Composition of church music reflecting both English and continental styles." },
+            { "year": "1623", "location": "London", "text": "Appointment as organist at Westminster Abbey." },
+            { "year": "1625", "location": "Canterbury", "text": "Death in Canterbury while attending the coronation of King Charles I." }
+        ]
     }
 ];

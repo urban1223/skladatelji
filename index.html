@@ -1,21 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#b45309">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Composer Timelines</title>
     
+    <!-- PWA in mobilne nastavitve -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#b45309">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Zunanje knjižnice (Zemljevidi Leaflet) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+    <!-- Stilski listi -->
     <link rel="stylesheet" href="stil.css">
+
+    <!-- Registracija Service Workerja -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Časovnice skladateljev: SW uspešno registriran!'))
+                    .catch(err => console.error('Časovnice skladateljev: Napaka pri SW:', err));
+            });
+        }
+    </script>
 </head>
 
 <body>
 
-<div id="auth-screen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a 0%, #1e1b2e 100%); display: flex; justify-content: center; align-items: center; z-index: 99999; font-family: sans-serif; padding: 20px; box-sizing: border-box;">
+<div id="app-loading" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a 0%, #1e1b2e 100%); display: flex; justify-content: center; align-items: center; z-index: 99999;">
+    <div id="app-loading-spinner"></div>
+</div>
+
+<div id="auth-screen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a 0%, #1e1b2e 100%); display: none; justify-content: center; align-items: center; z-index: 99999; font-family: sans-serif; padding: 20px; box-sizing: border-box;">
     <div style="background: #1e293b; padding: 36px 32px; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); width: 100%; max-width: 380px; text-align: center; border: 1px solid #334155;">
 
         <div style="width: 56px; height: 56px; background: var(--amber, #f59e0b); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; font-size: 28px;">🎼</div>
@@ -67,8 +88,11 @@
         </select>
     </div>
     
-    <button onclick="showAddMusicianForm()" style="margin-bottom: 16px;">+ Add musician</button>
-    
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <button id="btn-add-musician" onclick="showAddMusicianForm()" class="secondary" style="flex: 1;">+ Add musician</button>
+        <button id="btn-add-global-event" onclick="showAddGlobalEventForm()" style="flex: 1;" title="e.g. plague, war, famine - spans a date range">+ Historical event</button>
+    </div>
+
     <ul id="musician-list"></ul>
 
     <div class="sidebar-profile-zone" style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-color); display: none; align-items: center; justify-content: flex-end; width: 100%; box-sizing: border-box;">
@@ -172,6 +196,62 @@
         </div>
     </div>
 
+    <div id="add-global-event-form" class="hidden content-panel">
+        <h3 id="ge-form-heading">Add historical event</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: -8px;">
+            An independent event (e.g. plague, war, famine) that spans a period of time and, optionally, one or more places. Any composer event that falls within this period (and place, if given) will be marked with a ⭐ across the app.
+        </p>
+
+        <div class="form-group">
+            <label>Event name</label>
+            <input type="text" id="ge-name" placeholder="e.g. Plague in Venice">
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="ge-description" rows="4" placeholder="Short description of the event..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Location(s) — optional</label>
+            <input type="text" id="ge-locations" list="existing-locations" placeholder="e.g. France, Spain (leave empty to affect all places)">
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 12px;">
+            <div style="flex: 1;">
+                <label>Start year</label>
+                <input type="text" id="ge-start-year" placeholder="e.g. 1575">
+            </div>
+            <div style="flex: 1;">
+                <label>Start month (optional)</label>
+                <select id="ge-start-month">
+                    <option value="">-- none --</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group" style="display: flex; gap: 12px;">
+            <div style="flex: 1;">
+                <label>End year</label>
+                <input type="text" id="ge-end-year" placeholder="e.g. 1577">
+            </div>
+            <div style="flex: 1;">
+                <label>End month (optional)</label>
+                <select id="ge-end-month">
+                    <option value="">-- none --</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 16px;">
+            <button id="ge-save-btn" onclick="saveNewGlobalEvent()" style="flex: 1;">Save</button>
+            <button class="secondary" onclick="closeDetailsView()" style="flex: 1;">Cancel</button>
+        </div>
+
+        <h3 style="margin-top: 32px; border-top: 1px solid var(--border-color); padding-top: 16px;">Existing historical events</h3>
+        <div id="global-event-list"></div>
+    </div>
+
     <div id="details-view" class="hidden content-panel">
         <div class="header-with-avatar">
             <div id="view-avatar-container"></div>
@@ -201,8 +281,11 @@
         <div id="timeline" class="timeline-container"></div>
 
         <div id="composer-journey-container" style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 20px;">
-            <h3>Composer's travel map</h3>
-            <div id="journey-map" style="height: 350px; width: 100%; border-radius: 6px; border: 1px solid var(--border-color); display: block;"></div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+                <h3 style="margin: 0;">Composer's travel map</h3>
+                <button type="button" id="map-theme-toggle-btn" class="secondary btn-sm" onclick="toggleMapTheme()" title="Switch between dark and light map">☀️ Light map</button>
+            </div>
+            <div id="journey-map" style="height: 350px; width: 100%; border-radius: 6px; border: 1px solid var(--border-color); display: block; margin-top: 10px;"></div>
         </div>
 
         <div id="map-navigation-panel" style="
@@ -278,7 +361,7 @@
 
             <div class="form-group">
                 <label>Raw text (Paste biography)</label>
-                <textarea id="raw-bio-input" rows="8" placeholder="Paste paragraphs from Grove, MGG, Wikipedia... AI will shorten sentences, rearrange them, and extract pure events."></textarea>
+                <textarea id="raw-bio-input" rows="8" placeholder="Paste paragraphs from Wikipedia or other Encyclopedias... AI will shorten sentences, rearrange them, and extract pure events."></textarea>
             </div>
             
             <button type="button" id="ai-analyze-btn" onclick="extractEventsWithGemini()" style="width: 100%; margin-bottom: 16px; background-color: var(--amber); color: #000;">Send for analysis</button>
@@ -333,8 +416,11 @@
     <script src="podatki.js"></script>
     <script src="js/sw-registracija.js"></script>
     <script src="js/skladatelji.js"></script>
+    <script src="js/lokacije.js"></script>
+    <script src="js/globalni_dogodki.js"></script>
     <script src="js/zemljevid.js"></script>
     <script src="js/ai_ekstrakcija.js"></script>
+    <script src="js/vodic.js"></script>
     <script src="js/inicializacija.js"></script>
     <script type="module" src="js/firebase-auth.js"></script>
 </body>

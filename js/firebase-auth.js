@@ -111,22 +111,39 @@ window.handleAuth = async function(event) {
             await signInWithEmailAndPassword(auth, email, password);
         } else {
             const result = await createUserWithEmailAndPassword(auth, email, password);
+            // The verification email is the whole point of registration, so if it
+            // can't be sent we must not pretend the sign-up succeeded. We surface
+            // the error and still sign out (the unverified account can't be used
+            // until it's confirmed anyway).
             try {
                 await sendEmailVerification(result.user);
             } catch (mailErr) {
                 console.error("Error sending verification email:", mailErr);
+                await signOut(auth);
+                if (errorEl) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = "Account created, but the confirmation email could not be sent. Please try 'Log In' and use the Resend button, or contact support.";
+                }
+                return;
             }
             await signOut(auth);
             document.getElementById('auth-form').reset();
             window.toggleAuthMode();
-            alert("Your account was created successfully! You should receive a confirmation link at " + email + ". Please log in now with your new account.");
+            alert("Your account was created!\n\nWe've sent a confirmation link to " + email + ". You MUST click that link before you can log in.\n\n(If you don't see it within a few minutes, check your spam folder.)");
         }
     } catch (error) {
         if (errorEl) {
             errorEl.style.display = 'block';
-            if (error.code === 'auth/invalid-credential') errorEl.textContent = "Incorrect password or email address.";
-            else if (error.code === 'auth/email-already-in-use') errorEl.textContent = "This email address is already registered.";
+            if (authMode === 'login' && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found')) {
+                // Modern Firebase returns invalid-credential for both a wrong password
+                // AND a non-existent account (to prevent email enumeration), so we
+                // point the user toward registration as the likely fix.
+                errorEl.textContent = "Login failed. If you don't have an account yet, tap \"Create New Account\" below to register. Otherwise, check your email and password.";
+            }
+            else if (error.code === 'auth/invalid-credential') errorEl.textContent = "Incorrect password or email address.";
+            else if (error.code === 'auth/email-already-in-use') errorEl.textContent = "This email address is already registered. Please log in instead.";
             else if (error.code === 'auth/weak-password') errorEl.textContent = "Password must be at least 6 characters.";
+            else if (error.code === 'auth/invalid-email') errorEl.textContent = "Please enter a valid email address.";
             else errorEl.textContent = "Error: " + error.message;
         }
     }
@@ -281,8 +298,23 @@ function prikaziZaslonPotrditve(user) {
 onAuthStateChanged(auth, async (user) => {
     const authScreen = document.getElementById('auth-screen');
     const sidebarProfileZone = document.querySelector('.sidebar-profile-zone');
+    const appLoading = document.getElementById('app-loading');
+
+    // Firebase je ugotovil, ali obstaja shranjena seja - odstranimo nalagalni zaslon
+    // in šele zdaj (ne prej) po potrebi pokažemo prijavni obrazec, da se ta ne
+    // zabliska prijavljenim uporabnikom ob vsakem osvežitvi strani.
+    if (appLoading) appLoading.remove();
 
     if (user) {
+        // user.emailVerified can be a stale snapshot from the cached session -
+        // force a refresh from Firebase so a just-created (or just-verified)
+        // account is never judged on out-of-date information.
+        try {
+            await user.reload();
+        } catch (reloadErr) {
+            console.error("Error refreshing user status:", reloadErr);
+        }
+
         if (!user.emailVerified) {
             if (authScreen) authScreen.style.setProperty('display', 'none', 'important');
             if (sidebarProfileZone) sidebarProfileZone.style.setProperty('display', 'none', 'important');
@@ -341,6 +373,17 @@ onAuthStateChanged(auth, async (user) => {
         if (typeof window.naloziGlasbenikeIzFirestore === 'function') {
             window.naloziGlasbenikeIzFirestore();
         }
+        if (typeof window.naloziGlobalneDogodkeIzFirestore === 'function') {
+            window.naloziGlobalneDogodkeIzFirestore();
+        }
+
+        // Ob prvi prijavi tega računa zaženemo voden uvodni pregled (enkrat na račun).
+        // Kratek zamik, da se stranska vrstica in profil izrišejo, preden usmerimo oblačke.
+        setTimeout(() => {
+            if (typeof window.preveriInZaženiVodic === 'function') {
+                window.preveriInZaženiVodic(user.uid);
+            }
+        }, 900);
     } else {
         trenutniUporabnikUID = null;
         trenutniUporabnikEmail = null;

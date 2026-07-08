@@ -3,8 +3,42 @@
    ========================================================================== */
 
 let mapInstance = null;
-let mapMarkersArray = []; 
+let mapMarkersArray = [];
 let currentMapMarkerIndex = -1;
+
+const MAP_THEME_KEY = 'zemljevid_tema';
+
+function getMapTileUrl() {
+    const theme = localStorage.getItem(MAP_THEME_KEY) || 'dark';
+    return theme === 'light'
+        ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+}
+
+function updateMapThemeToggleLabel() {
+    const btn = document.getElementById('map-theme-toggle-btn');
+    if (!btn) return;
+    const theme = localStorage.getItem(MAP_THEME_KEY) || 'dark';
+    btn.textContent = theme === 'light' ? '🌙 Dark map' : '☀️ Light map';
+}
+
+// Re-renders whichever map view (musician / year / location) is currently open
+// with the newly chosen tile theme.
+function toggleMapTheme() {
+    const current = localStorage.getItem(MAP_THEME_KEY) || 'dark';
+    localStorage.setItem(MAP_THEME_KEY, current === 'dark' ? 'light' : 'dark');
+    updateMapThemeToggleLabel();
+
+    const state = history.state;
+    if (state && state.view === 'musician' && state.id) {
+        const m = musicians.find(item => item.id === state.id);
+        if (m && typeof renderJourneyDiagram === 'function') renderJourneyDiagram(m);
+    } else if (state && state.view === 'year' && state.year) {
+        if (typeof filterByYear === 'function') filterByYear(state.year, false);
+    } else if (state && state.view === 'location' && state.location) {
+        if (typeof filterByLocation === 'function') filterByLocation(state.location, false);
+    }
+}
 
 const GEO_COORDINATES = {
     "Ljubljana": [46.0569, 14.5058],
@@ -49,9 +83,6 @@ async function renderJourneyDiagram(musician) {
         return;
     }
 
-    // Helper sleep function (prevents API blocking)
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-    
     const sortedEvents = [...musician.events].sort((a, b) => (parseYear(a.year) || 9999) - (parseYear(b.year) || 9999));
     const travelStations = [];
     
@@ -61,22 +92,17 @@ async function renderJourneyDiagram(musician) {
         const locName = ev.location.trim();
         let coords = GEO_COORDINATES[locName];
 
-        if (!coords) {
-            // Wait 1.2 seconds between calls to not overload the server
-            await sleep(1200); 
-            
+        if (!coords && typeof window.resolveLocationData === 'function') {
+            // Skupni Firebase "locations" cache (js/lokacije.js): najprej Firebase,
+            // šele nato zunanji geokoder, uspeh se shrani nazaj za vse uporabnike.
             try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}&limit=1`, {
-                    headers: { 'User-Agent': 'BaroqueArchiveApp/1.0' }
-                });
-                const data = await response.json();
-                
-                if (data && data.length > 0) {
-                    coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                    GEO_COORDINATES[locName] = coords; // Save for next time
+                const data = await window.resolveLocationData(locName);
+                if (data) {
+                    coords = [data.lat, data.lon];
+                    GEO_COORDINATES[locName] = coords; // in-memory cache za to sejo
                 }
             } catch (err) {
-                console.error("Error searching for:", locName);
+                console.error("Error searching for:", locName, err);
             }
         }
 
@@ -104,7 +130,8 @@ async function renderJourneyDiagram(musician) {
 
     try {
         mapInstance = L.map('journey-map', { attributionControl: false }).setView(travelStations[0].coords, 4);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
+        L.tileLayer(getMapTileUrl()).addTo(mapInstance);
+        updateMapThemeToggleLabel();
 
         const latlngs = [];
         travelStations.forEach((station, index) => {
@@ -221,7 +248,8 @@ function renderLocationMap(locationName) {
     function drawMarker(coords) {
         try {
             mapInstance = L.map('journey-map', { attributionControl: false }).setView(coords, 8);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
+            L.tileLayer(getMapTileUrl()).addTo(mapInstance);
+            updateMapThemeToggleLabel();
 
             const locationIcon = L.divIcon({
                 className: 'custom-map-location-container',
@@ -248,12 +276,19 @@ function renderLocationMap(locationName) {
 
     mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Searching coordinates for location "${locationName}"...</div>`;
 
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}&limit=1`)
-        .then(response => response.json())
+    if (typeof window.resolveLocationData !== 'function') {
+        mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Error connecting to the search engine.</div>`;
+        return;
+    }
+
+    // Skupni Firebase "locations" cache (js/lokacije.js): najprej Firebase,
+    // šele nato zunanji geokoder, uspeh se shrani nazaj za vse uporabnike.
+    window.resolveLocationData(locationName)
         .then(data => {
-            if (data && data.length > 0) {
+            if (data) {
+                GEO_COORDINATES[locationName] = [data.lat, data.lon]; // in-memory cache za to sejo
                 mapContainer.innerHTML = '';
-                drawMarker([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+                drawMarker([data.lat, data.lon]);
             } else {
                 mapContainer.innerHTML = `<div style="padding: 20px; color: var(--text-muted); text-align: center;">Coordinates for location "${locationName}" could not be found.</div>`;
             }

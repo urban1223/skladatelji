@@ -3,20 +3,55 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Only authenticated users can access
     match /musicians/{musicianId} {
-      // Read: any authenticated user can read musicians
+      // Musicians are a SHARED collaborative resource: any logged-in,
+      // email-verified user may read, add, or co-author events on any
+      // profile (update) - this also lets the "claim unowned data" action
+      // (Settings modal) assign an owner to legacy/imported profiles that
+      // don't have one yet. Per-event authorship (vnesUID inside each event)
+      // is tracked for attribution/UI, not enforced server-side here - see
+      // the code comment above deleteEvent() in skladatelji.js for why.
+      // DELETING the whole profile requires being its exact recorded owner -
+      // ownerless profiles can't be deleted by anyone until claimed first.
+      // This also means "merge" can only remove a duplicate profile the
+      // current user themselves owns (checked client-side before attempting,
+      // so the user gets a clear message instead of a silent permission
+      // failure).
       allow read: if request.auth != null;
 
-      // Create: any authenticated user can create new musicians
-      allow create: if request.auth != null &&
-                       request.resource.data.vnesUID == request.auth.uid;
+      allow create: if request.auth != null && request.auth.token.email_verified == true;
 
-      // Update: only the creator (vnesUID) can update
-      allow update: if request.auth != null &&
-                       resource.data.vnesUID == request.auth.uid;
+      allow update: if request.auth != null && request.auth.token.email_verified == true;
 
-      // Delete: only the creator can delete
-      allow delete: if request.auth != null &&
+      allow delete: if request.auth != null && request.auth.token.email_verified == true &&
                        resource.data.vnesUID == request.auth.uid;
+    }
+
+    match /globalEvents/{eventId} {
+      // Independent historical events (e.g. plagues, wars) spanning a date range.
+      // Unlike musicians, these are single-author facts, not a co-authored
+      // list - so both editing and deleting require being the exact recorded
+      // owner. The one exception is updating an OWNERLESS event (vnesUID ==
+      // null): that's allowed so the "claim unowned data" action can assign
+      // an owner to legacy/imported events - after that, it's locked to them.
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null && request.auth.token.email_verified == true;
+
+      allow update: if request.auth != null && request.auth.token.email_verified == true &&
+                       (resource.data.vnesUID == null || resource.data.vnesUID == request.auth.uid);
+
+      allow delete: if request.auth != null && request.auth.token.email_verified == true &&
+                       resource.data.vnesUID == request.auth.uid;
+    }
+
+    match /locations/{locationId} {
+      // Skupni geokodirni cache: ime mesta -> { lat, lon, country, ... }.
+      // Napolni ga na zahtevo katerikoli prijavljen uporabnik, tako da zunanji
+      // geokodirni API (GeoNames) posamezno mesto poišče le ENKRAT za vse.
+      // Ni "lastnika" in ni brisanja - zastarel zapis se lahko le prepiše.
+      allow read: if request.auth != null;
+
+      allow create, update: if request.auth != null && request.auth.token.email_verified == true;
     }
 
     match /profiles/{userId} {

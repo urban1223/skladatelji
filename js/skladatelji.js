@@ -9,8 +9,8 @@ let isEditingMusicianMode = false;
 
 // HTML escape to prevent XSS attacks
 function escapeHtml(unsafe) {
-    if (!unsafe) return '';
-    return unsafe
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -18,42 +18,84 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-// Save a single musician (with all events) to Firestore
+// Save a single musician (with all events) to Firestore — with retry logic
 async function shraniGlasbenikaVFirestore(m) {
     if (!window.db) { console.error("Firestore is not available."); return; }
-    try {
-        await window.fsSetDoc(window.fsDoc(window.db, 'musicians', m.id), m);
-    } catch (err) {
-        console.error("Error saving to the shared database:", err);
-        alert("Error saving to the shared database. Check your internet connection.");
+
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            await window.fsSetDoc(window.fsDoc(window.db, 'musicians', m.id), m);
+            return; // Success
+        } catch (err) {
+            lastError = err;
+            console.warn(`Attempt ${attempt}/${maxRetries} failed:`, err.code);
+            if (attempt < maxRetries) {
+                const delayMs = Math.pow(2, attempt - 1) * 500; // 500ms, 1s, 2s
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
     }
+
+    console.error("Final error after retries:", lastError);
+    alert("Error saving to the shared database. Check your internet connection.");
 }
 
-// Delete musician from Firestore
+// Delete musician from Firestore — with retry logic
 async function izbrisiGlasbenikaIzFirestore(id) {
     if (!window.db) return;
-    try {
-        await window.fsDeleteDoc(window.fsDoc(window.db, 'musicians', id));
-    } catch (err) {
-        console.error("Error deleting from the shared database:", err);
-        alert("Error deleting from the shared database.");
+
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            await window.fsDeleteDoc(window.fsDoc(window.db, 'musicians', id));
+            return; // Success
+        } catch (err) {
+            lastError = err;
+            console.warn(`Delete attempt ${attempt}/${maxRetries} failed:`, err.code);
+            if (attempt < maxRetries) {
+                const delayMs = Math.pow(2, attempt - 1) * 500;
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
     }
+
+    console.error("Final delete error after retries:", lastError);
+    alert("Error deleting from the shared database.");
 }
 
-// Load all musicians from Firestore (called on login from firebase-auth.js)
+// Load all musicians from Firestore (called on login from firebase-auth.js) — with retry logic
 async function naloziGlasbenikeIzFirestore() {
     if (!window.db) { console.error("Firestore is not available."); return; }
-    try {
-        const snapshot = await window.fsGetDocs(window.fsCollection(window.db, 'musicians'));
-        musicians = [];
-        snapshot.forEach(d => musicians.push(d.data()));
-        if (typeof searchMusicians === 'function') searchMusicians();
-        if (typeof updateLocationLists === 'function') updateLocationLists();
-        if (typeof updateLinkDropdowns === 'function') updateLinkDropdowns();
-    } catch (err) {
-        console.error("Error loading the shared database:", err);
-        alert("Error loading the shared database from Firestore.");
+
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const snapshot = await window.fsGetDocs(window.fsCollection(window.db, 'musicians'));
+            musicians = [];
+            snapshot.forEach(d => musicians.push(d.data()));
+            if (typeof searchMusicians === 'function') searchMusicians();
+            if (typeof updateLocationLists === 'function') updateLocationLists();
+            if (typeof updateLinkDropdowns === 'function') updateLinkDropdowns();
+            return; // Success
+        } catch (err) {
+            lastError = err;
+            console.warn(`Load attempt ${attempt}/${maxRetries} failed:`, err.code);
+            if (attempt < maxRetries) {
+                const delayMs = Math.pow(2, attempt - 1) * 500;
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
     }
+
+    console.error("Final load error after retries:", lastError);
+    alert("Error loading the shared database from Firestore.");
 }
 window.naloziGlasbenikeIzFirestore = naloziGlasbenikeIzFirestore;
 
@@ -81,13 +123,13 @@ function deleteMusician() {
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
 
-    if (m.vnesUID && m.vnesUID !== window.trenutniUporabnikUID) {
+    if (m.vnesUID !== window.trenutniUporabnikUID) {
         alert("You can only delete people you added yourself.");
         return;
     }
 
     const potrditev = confirm(`⚠️ WARNING: Are you sure you want to delete the composer "${m.name}" and all their associated events? This action cannot be undone.`);
-    
+
     if (potrditev) {
         musicians = musicians.filter(item => item.id !== currentMusicianId);
         izbrisiGlasbenikaIzFirestore(m.id);
@@ -284,7 +326,7 @@ if (searchInput) {
     });
 }
 
-async function filterByYear(targetYear) {
+async function filterByYear(targetYear, pushHistory = true) {
     if (!targetYear) {
         closeDetailsView();
         return;
@@ -300,6 +342,8 @@ async function filterByYear(targetYear) {
     document.getElementById('search-input').value = "";
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('add-musician-form').classList.add('hidden');
+    const geFormOverview = document.getElementById('add-global-event-form');
+    if (geFormOverview) geFormOverview.classList.add('hidden');
 
     const detailsView = document.getElementById('details-view');
     const nameEl = document.getElementById('view-name');
@@ -364,16 +408,24 @@ async function filterByYear(targetYear) {
                 ? `<span class="timeline-location" onclick="document.getElementById('location-filter').value='${escapeHtml(item.event.location).replace(/'/g, "\\'")}'; filterByLocation('${escapeHtml(item.event.location).replace(/'/g, "\\'")}')">\u{1F4CD} ${escapeHtml(item.event.location)}</span>`
                 : '';
 
+            const starHTML = typeof globalEventBadgeHTML === 'function' ? globalEventBadgeHTML(cleanTargetYear, item.event.location) : '';
+
             div.innerHTML = `
                 <div class="timeline-header">
                     <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${escapeHtml(item.musicianName)}</span>
                     ${locationHTML}
                     ${ageHTML}
+                    ${starHTML}
                 </div>
                 <div style="color: #ddd; margin-top: 4px;">${typeof parseWikiLinks === 'function' ? parseWikiLinks(escapeHtml(item.event.text)) : escapeHtml(item.event.text)}</div>
             `;
             timelineEl.appendChild(div);
         });
+    }
+
+    if (typeof refreshGlobalEventStarsForLocations === 'function') {
+        const locs = allYearEvents.map(item => item.event.location).filter(l => l);
+        refreshGlobalEventStarsForLocations(locs, () => filterByYear(targetYear, false));
     }
 
     detailsView.classList.remove('hidden');
@@ -402,7 +454,8 @@ async function filterByYear(targetYear) {
         mapMarkersArray = [];
         
         mapInstance = L.map('journey-map', { attributionControl: false }).setView([46.0569, 14.5058], 5);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
+        L.tileLayer(getMapTileUrl()).addTo(mapInstance);
+        if (typeof updateMapThemeToggleLabel === 'function') updateMapThemeToggleLabel();
 
         const bounds = [];
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -475,10 +528,10 @@ async function filterByYear(targetYear) {
         if (journeyContainer) journeyContainer.style.display = 'none';
     }
 
-    history.pushState({ view: "details", id: null }, "");
+    if (pushHistory) history.pushState({ view: "year", year: cleanTargetYear }, "");
 }
 
-function filterByLocation(targetLoc) {
+function filterByLocation(targetLoc, pushHistory = true) {
     if (!targetLoc) {
         closeDetailsView();
         return;
@@ -487,6 +540,8 @@ function filterByLocation(targetLoc) {
     document.getElementById('search-input').value = "";
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('add-musician-form').classList.add('hidden');
+    const geFormOverview = document.getElementById('add-global-event-form');
+    if (geFormOverview) geFormOverview.classList.add('hidden');
 
     const detailsView = document.getElementById('details-view');
     const nameEl = document.getElementById('view-name');
@@ -542,16 +597,23 @@ function filterByLocation(targetLoc) {
                 }
             }
 
+            const starHTML = typeof globalEventBadgeHTML === 'function' ? globalEventBadgeHTML(eventYear, item.event.location) : '';
+
             div.innerHTML = `
                 <div class="timeline-header">
                     <span class="timeline-author" style="cursor:pointer; font-weight: bold; color: var(--amber);" onclick="showMusicianDetails('${item.musicianId}')">${escapeHtml(item.musicianName)}</span>
                     <span class="timeline-year">${escapeHtml(item.event.year || '')}</span>
                     ${ageHTML}
+                    ${starHTML}
                 </div>
                 <div style="color: #ddd; margin-top: 4px;">${parseWikiLinks(escapeHtml(item.event.text))}</div>
             `;
             timelineEl.appendChild(div);
         });
+    }
+
+    if (typeof refreshGlobalEventStarsForLocations === 'function') {
+        refreshGlobalEventStarsForLocations([targetLoc], () => filterByLocation(targetLoc, false));
     }
 
     detailsView.classList.remove('hidden');
@@ -568,7 +630,7 @@ function filterByLocation(targetLoc) {
         renderLocationMap(targetLoc);
     }
 
-    history.pushState({ view: "details", id: null }, "");
+    if (pushHistory) history.pushState({ view: "location", location: targetLoc }, "");
 }
 
 function parseWikiLinks(text) {
@@ -612,12 +674,14 @@ function generatePureSummary(m) {
     return summary;
 }
 
-function showMusicianDetails(id) {
+function showMusicianDetails(id, pushHistory = true) {
     const filterSelect = document.getElementById('location-filter');
     if (filterSelect) filterSelect.value = "";
     
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('add-musician-form').classList.add('hidden');
+    const geFormMusician = document.getElementById('add-global-event-form');
+    if (geFormMusician) geFormMusician.classList.add('hidden');
     document.getElementById('add-event-btn').classList.remove('hidden');
     
     document.getElementById('profile-settings-container').classList.remove('hidden');
@@ -670,7 +734,7 @@ function showMusicianDetails(id) {
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
 
-    history.pushState({ view: "details", id: id }, "");
+    if (pushHistory) history.pushState({ view: "musician", id: id }, "");
 }
 
 /* ==========================================================================
@@ -722,7 +786,7 @@ function renderTimeline(musician) {
                 ${stevilke.check ? `✅ ${stevilke.check} ` : ''}${stevilke.question ? `❓ ${stevilke.question} ` : ''}${stevilke.cross ? `🚫 ${stevilke.cross}` : ''}
             </div>` : '';
 
-        const jeLastnikDogodka = !e.vnesUID || e.vnesUID === window.trenutniUporabnikUID;
+        const jeLastnikDogodka = e.vnesUID === window.trenutniUporabnikUID;
         let akcijeHTML = '';
         if (jeLastnikDogodka) {
             akcijeHTML = `
@@ -739,11 +803,14 @@ function renderTimeline(musician) {
                 </div>`;
         }
 
+        const starHTML = typeof globalEventBadgeHTML === 'function' ? globalEventBadgeHTML(eventYear, e.location) : '';
+
         div.innerHTML = `
             <div class="timeline-header">
                 <span class="timeline-year">${escapeHtml(e.year || '')}</span>
                 ${locHTML}
                 ${ageHTML}
+                ${starHTML}
             </div>
             <div style="color: #ddd;">${parseWikiLinks(escapeHtml(e.text))}</div>
             ${avtorHTML}
@@ -752,6 +819,11 @@ function renderTimeline(musician) {
         `;
         timelineEl.appendChild(div);
     });
+
+    if (typeof refreshGlobalEventStarsForLocations === 'function') {
+        const locs = musician.events.map(e => e.location).filter(l => l);
+        refreshGlobalEventStarsForLocations(locs, () => renderTimeline(musician));
+    }
 }
 
 function preklopiOcenoDogodka(eventId, tipOcene) {
@@ -820,19 +892,23 @@ async function prikaziProfilOsebe(uid) {
 
 function closeDetailsView() {
     document.getElementById('details-view').classList.add('hidden');
+    document.getElementById('add-musician-form').classList.add('hidden');
+    const geForm = document.getElementById('add-global-event-form');
+    if (geForm) geForm.classList.add('hidden');
     document.getElementById('placeholder-text').classList.remove('hidden');
-    
+
     const backBtn = document.getElementById('back-btn');
     if (backBtn) {
         backBtn.style.display = 'none';
     }
-    
+
     document.getElementById('sidebar').classList.remove('mobilno-skrij');
     document.getElementById('main-content').classList.remove('mobilno-prikaži');
-    
+
     currentMusicianId = null;
 
-    if (history.state && history.state.view === "details") {
+    const navigableViews = ["musician", "year", "location"];
+    if (history.state && navigableViews.includes(history.state.view)) {
         history.back();
     }
 }
@@ -841,12 +917,18 @@ function hideAllViews() {
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('add-musician-form').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
+    const geForm = document.getElementById('add-global-event-form');
+    if (geForm) geForm.classList.add('hidden');
 }
 
 function showAddMusicianForm() {
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
-    
+    const geForm = document.getElementById('add-global-event-form');
+    if (geForm) geForm.classList.add('hidden');
+
+    if (typeof setAddButtonActive === 'function') setAddButtonActive('musician');
+
     const formEl = document.getElementById('add-musician-form');
     formEl.classList.remove('hidden');
 
@@ -859,8 +941,6 @@ function showAddMusicianForm() {
     document.getElementById('back-btn').style.display = 'inline-block';
     document.getElementById('sidebar').classList.add('mobilno-skrij');
     document.getElementById('main-content').classList.add('mobilno-prikaži');
-
-    history.pushState({ view: "details", id: null }, "");
 }
 
 function showEditMusicianForm() {
@@ -876,8 +956,6 @@ function showEditMusicianForm() {
     document.getElementById('new-image').value = m.img || '';
     document.getElementById('add-musician-form').classList.remove('hidden');
     document.getElementById('back-btn').style.display = 'inline-block';
-
-    history.pushState({ view: "details", id: null }, "");
 }
 
 function saveNewMusician() {
@@ -999,7 +1077,7 @@ function submitEventForm() {
     if (editingEventId !== null) {
         const ev = m.events.find(e => e.id === editingEventId);
         if (ev) {
-            if (ev.vnesUID && ev.vnesUID !== window.trenutniUporabnikUID) {
+            if (ev.vnesUID !== window.trenutniUporabnikUID) {
                 alert("You can only edit events you added yourself.");
                 return;
             }
@@ -1027,11 +1105,15 @@ function submitEventForm() {
     hideEventModal();
 }
 
+// NOTE: this ownership check is enforced client-side only. Events live inside
+// the musician document's `events` array rather than their own Firestore
+// documents, so a per-event server-side rule isn't possible without moving
+// events into a subcollection (a bigger migration, deliberately deferred).
 function deleteEvent(eventId) {
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
     const ev = m.events.find(e => e.id === eventId);
-    if (ev && ev.vnesUID && ev.vnesUID !== window.trenutniUporabnikUID) {
+    if (ev && ev.vnesUID !== window.trenutniUporabnikUID) {
         alert("You can only delete events you added yourself.");
         return;
     }
@@ -1169,6 +1251,11 @@ function executeMusicianMerge() {
     } else {
         mainMusician = targetMusician;
         duplicateMusician = sourceMusician;
+    }
+
+    if (duplicateMusician.vnesUID && duplicateMusician.vnesUID !== window.trenutniUporabnikUID) {
+        alert(`Merge cancelled: "${duplicateMusician.name}" was added by someone else, so only they (or you, for a profile you added) can delete it. Ask them to perform the merge, or pick a duplicate you created yourself.`);
+        return;
     }
 
     if (!confirm(`Are you sure you want to merge all events under the profile "${mainMusician.name}"? The profile "${duplicateMusician.name}" will be permanently deleted.`)) {
