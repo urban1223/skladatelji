@@ -144,6 +144,117 @@ function parseYear(yearStr) {
     return match ? parseInt(match[0], 10) : null;
 }
 
+function getEventDate(event, prefix = '') {
+    const date = event[prefix ? `${prefix}Date` : 'date'];
+    if (date && typeof date === 'object') {
+        return {
+            year: date.year ?? '',
+            month: date.month ?? '',
+            day: date.day ?? ''
+        };
+    }
+    return {
+        year: prefix ? event[`${prefix}Year`] || '' : event.year || '',
+        month: prefix ? event[`${prefix}Month`] || '' : '',
+        day: prefix ? event[`${prefix}Day`] || '' : ''
+    };
+}
+
+function formatEventDate(event) {
+    const start = getEventDate(event);
+    const end = getEventDate(event, 'end');
+    const format = (date, structured) => structured
+        ? `${date.day || 'unknown'}/${date.month || 'unknown'}/${date.year || 'unknown'}`
+        : [date.day, date.month, date.year].filter(Boolean).join('/');
+    const structured = !!event.date;
+    const startText = format(start, structured) || 'Date unknown';
+    const endText = event.endDate ? format(end, true) : '';
+    return endText ? `${startText} – ${endText}` : startText;
+}
+
+function eventDateForForm(event, prefix = '') {
+    const date = getEventDate(event, prefix);
+    document.getElementById(`event-${prefix ? 'end-' : ''}year`).value = date.year;
+    document.getElementById(`event-${prefix ? 'end-' : ''}month`).value = date.month;
+    document.getElementById(`event-${prefix ? 'end-' : ''}day`).value = date.day;
+}
+
+function readEventDateFromForm(prefix = '') {
+    const name = prefix ? 'end-' : '';
+    const year = document.getElementById(`event-${name}year`).value.trim();
+    const monthValue = document.getElementById(`event-${name}month`).value;
+    const dayValue = document.getElementById(`event-${name}day`).value;
+    const month = monthValue ? Number(monthValue) : null;
+    const day = dayValue ? Number(dayValue) : null;
+    if (!year && !month && !day) return null;
+    if (!year) return { year: null, month, day };
+    return { year, month, day };
+}
+
+function validateEventDate(date, label) {
+    if (!date) return true;
+    if (!date.year && (date.month || date.day)) {
+        alert(`${label}: month and day require a known year.`);
+        return false;
+    }
+    if (date.month && (date.month < 1 || date.month > 12)) {
+        alert(`${label}: month must be between 1 and 12.`);
+        return false;
+    }
+    if (date.day && (date.day < 1 || date.day > 31)) {
+        alert(`${label}: day must be between 1 and 31.`);
+        return false;
+    }
+    return true;
+}
+
+function compareEventDates(first, second) {
+    if (!first?.year || !second?.year) return null;
+    if (Number(first.year) !== Number(second.year)) return Number(first.year) - Number(second.year);
+    if (!first.month || !second.month || Number(first.month) !== Number(second.month)) {
+        return first.month && second.month ? Number(first.month) - Number(second.month) : 0;
+    }
+    return first.day && second.day ? Number(first.day) - Number(second.day) : 0;
+}
+
+function addEventSourceRow(source = {}) {
+    const container = document.getElementById('event-sources');
+    if (!container) return;
+    const row = document.createElement('div');
+    row.className = 'event-source-row';
+    row.style.cssText = 'display:grid; grid-template-columns:1fr 1.5fr 1.5fr 1fr 1.5fr auto; gap:6px; margin-bottom:6px;';
+    row.innerHTML = `
+        <input type="text" data-source-field="type" placeholder="Type" value="${escapeHtml(source.type || '')}">
+        <input type="text" data-source-field="citation" placeholder="Citation" value="${escapeHtml(source.citation || '')}">
+        <input type="url" data-source-field="url" placeholder="URL" value="${escapeHtml(source.url || '')}">
+        <input type="date" data-source-field="accessedAt" value="${escapeHtml(source.accessedAt || '')}">
+        <input type="text" data-source-field="note" placeholder="What it confirms" value="${escapeHtml(source.note || '')}">
+        <button type="button" class="secondary btn-sm" title="Remove source" onclick="this.parentElement.remove()">×</button>`;
+    container.appendChild(row);
+}
+
+function readEventSources() {
+    return [...document.querySelectorAll('#event-sources .event-source-row')].map(row => {
+        const source = {};
+        row.querySelectorAll('[data-source-field]').forEach(input => {
+            if (input.value.trim()) source[input.dataset.sourceField] = input.value.trim();
+        });
+        return source;
+    }).filter(source => Object.keys(source).length > 0);
+}
+
+function eventProvenance(previousEvent = null) {
+    const now = new Date().toISOString();
+    return {
+        createdBy: previousEvent?.createdBy || window.trenutniUporabnikUID || null,
+        createdByName: previousEvent?.createdByName || [window.trenutniUporabnikIme, window.trenutniUporabnikPriimek].filter(Boolean).join(' '),
+        createdAt: previousEvent?.createdAt || now,
+        updatedBy: window.trenutniUporabnikUID || null,
+        updatedByName: [window.trenutniUporabnikIme, window.trenutniUporabnikPriimek].filter(Boolean).join(' '),
+        updatedAt: now
+    };
+}
+
 function toggleProfileDropdown(event) {
     event.stopPropagation();
     const dropdown = document.getElementById('profile-dropdown');
@@ -205,7 +316,7 @@ function copyProfileToClipboard() {
 
         sortedEvents.forEach(e => {
             let ageStr = '';
-            const eventYear = parseYear(e.year);
+            const eventYear = parseYear(e.year || getEventDate(e).year);
             if (birthYear && eventYear) {
                 const age = eventYear - birthYear;
                 if (age >= 0 && age <= 110) ageStr = ` (${age} years old)`;
@@ -839,16 +950,25 @@ function renderTimeline(musician) {
         }
 
         const starHTML = typeof globalEventBadgeHTML === 'function' ? globalEventBadgeHTML(eventYear, e.location) : '';
+        const sourceHTML = e.sources?.length
+            ? `<div class="timeline-source" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Source: ${escapeHtml(e.sources.map(s => s.citation || s.type || s.url || '').filter(Boolean).join('; '))}</div>`
+            : (e.source ? `<div class="timeline-source" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Source: ${escapeHtml(e.source)}</div>` : '');
+        const reviewStatus = e.reviewStatus || 'review-needed';
+        const reviewHTML = reviewStatus || e.confidence || e.evidenceNote
+            ? `<div class="timeline-evidence" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Status: ${escapeHtml(reviewStatus)}${e.confidence ? ` · Confidence: ${escapeHtml(e.confidence)}` : ''}${e.evidenceNote ? ` · ${escapeHtml(e.evidenceNote)}` : ''}</div>`
+            : '';
 
         div.innerHTML = `
             <div class="timeline-header">
-                <span class="timeline-year">${escapeHtml(e.year || '')}</span>
+                <span class="timeline-year">${escapeHtml(formatEventDate(e))}</span>
                 ${locHTML}
                 ${ageHTML}
                 ${starHTML}
             </div>
             <div style="color: #ddd;">${parseWikiLinks(escapeHtml(e.text))}</div>
             ${avtorHTML}
+            ${sourceHTML}
+            ${reviewHTML}
             ${stevecHTML}
             ${akcijeHTML}
         `;
@@ -1051,6 +1171,8 @@ function showEventModal(isEdit, eventId = null) {
     document.getElementById('raw-bio-input').value = '';
     document.getElementById('extraction-results-container').classList.add('hidden');
     document.getElementById('save-extracted-btn').classList.add('hidden');
+    document.getElementById('event-sources').innerHTML = '';
+    addEventSourceRow();
 
     const modal = document.getElementById('event-modal');
     
@@ -1063,9 +1185,16 @@ function showEventModal(isEdit, eventId = null) {
         const m = musicians.find(item => item.id === currentMusicianId);
         const ev = m.events.find(e => e.id === eventId);
         if (ev) {
-            document.getElementById('event-year').value = ev.year || '';
+            eventDateForForm(ev);
+            eventDateForForm(ev, 'end');
             document.getElementById('event-location').value = ev.location || '';
             document.getElementById('event-text').value = ev.text || '';
+            document.getElementById('event-confidence').value = ev.confidence || 'medium';
+            document.getElementById('event-review-status').value = ev.reviewStatus || 'review-needed';
+            document.getElementById('event-evidence-note').value = ev.evidenceNote || '';
+            document.getElementById('event-sources').innerHTML = '';
+            (ev.sources || []).forEach(source => addEventSourceRow(source));
+            if (!ev.sources?.length) addEventSourceRow();
         }
     } else {
         editingEventId = null;
@@ -1073,9 +1202,13 @@ function showEventModal(isEdit, eventId = null) {
         document.getElementById('modal-save-btn').textContent = "Add";
         document.getElementById('tab-auto').classList.remove('hidden');
         
-        document.getElementById('event-year').value = '';
+        eventDateForForm({ year: '', month: '', day: '' });
+        eventDateForForm({ year: '', month: '', day: '' }, 'end');
         document.getElementById('event-location').value = '';
         document.getElementById('event-text').value = '';
+        document.getElementById('event-confidence').value = 'medium';
+        document.getElementById('event-review-status').value = 'new';
+        document.getElementById('event-evidence-note').value = '';
     }
     
     modal.classList.remove('hidden'); 
@@ -1108,10 +1241,20 @@ function hideEventModal() {
 
 function submitEventForm() {
     if (DEVELOPMENT_MODE) return;
-    const year = document.getElementById('event-year').value.trim();
+    const startDate = readEventDateFromForm();
+    const endDate = readEventDateFromForm('end');
     const location = document.getElementById('event-location').value.trim();
     const text = document.getElementById('event-text').value.trim();
     if (!text) { alert("Please enter a description."); return; }
+    if (!startDate?.year) {
+        alert("Please enter the event year. If the date is not known, leave the event out rather than guessing.");
+        return;
+    }
+    if (!validateEventDate(startDate, 'Start date') || !validateEventDate(endDate, 'End date')) return;
+    if (endDate && compareEventDates(startDate, endDate) > 0) {
+        alert("End date cannot be earlier than the start date.");
+        return;
+    }
 
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
@@ -1123,20 +1266,47 @@ function submitEventForm() {
                 alert("You can only edit events you added yourself.");
                 return;
             }
-            ev.year = year;
+            const previous = JSON.parse(JSON.stringify(ev));
+            ev.date = startDate;
+            ev.endDate = endDate;
+            ev.year = startDate?.year || '';
             ev.location = location;
             ev.text = text;
+            ev.confidence = document.getElementById('event-confidence').value;
+            ev.reviewStatus = document.getElementById('event-review-status').value;
+            ev.evidenceNote = document.getElementById('event-evidence-note').value.trim();
+            ev.sources = readEventSources();
+            Object.assign(ev, eventProvenance(previous));
+            ev.auditTrail = [...(ev.auditTrail || []), {
+                changedAt: ev.provenance.updatedAt,
+                changedBy: ev.provenance.updatedBy,
+                changedByName: ev.provenance.updatedByName,
+                action: 'updated'
+            }];
         }
     } else {
         if (!m.events) m.events = [];
         m.events.push({
             id: Date.now(),
-            year: year,
+            year: startDate?.year || '',
+            date: startDate,
+            endDate: endDate,
             location: location,
             text: text,
+            sources: readEventSources(),
+            confidence: document.getElementById('event-confidence').value,
+            reviewStatus: document.getElementById('event-review-status').value,
+            evidenceNote: document.getElementById('event-evidence-note').value.trim(),
             vnesUID: window.trenutniUporabnikUID || null,
             vnesIme: window.trenutniUporabnikIme || '',
-            vnesPriimek: window.trenutniUporabnikPriimek || ''
+            vnesPriimek: window.trenutniUporabnikPriimek || '',
+            ...eventProvenance(),
+            auditTrail: [{
+                changedAt: new Date().toISOString(),
+                changedBy: window.trenutniUporabnikUID || null,
+                changedByName: [window.trenutniUporabnikIme, window.trenutniUporabnikPriimek].filter(Boolean).join(' '),
+                action: 'created'
+            }]
         });
     }
 

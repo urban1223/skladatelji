@@ -327,6 +327,14 @@
                     <label>Year</label>
                     <input type="text" id="event-year" placeholder="1710">
                 </div>
+                <div style="width: 100px;">
+                    <label>Month</label>
+                    <input type="number" id="event-month" min="1" max="12" placeholder="11">
+                </div>
+                <div style="width: 100px;">
+                    <label>Day</label>
+                    <input type="number" id="event-day" min="1" max="31" placeholder="23">
+                </div>
                 <div style="flex: 1;">
                     <label>Location</label>
                     <input type="text" id="event-location" list="existing-locations" placeholder="type or select...">
@@ -337,6 +345,53 @@
             <div class="form-group">
                 <label>Description of event or work</label>
                 <textarea id="event-text" rows="5" placeholder="Enter the full description of the event or work, potentially adding a link to another composer..."></textarea>
+            </div>
+
+            <div class="form-group-row">
+                <div style="flex: 1;">
+                    <label>End year (optional)</label>
+                    <input type="text" id="event-end-year" placeholder="For a date range">
+                </div>
+                <div style="width: 100px;">
+                    <label>End month</label>
+                    <input type="number" id="event-end-month" min="1" max="12" placeholder="11">
+                </div>
+                <div style="width: 100px;">
+                    <label>End day</label>
+                    <input type="number" id="event-end-day" min="1" max="31" placeholder="30">
+                </div>
+            </div>
+
+            <div class="form-group-row">
+                <div style="flex: 1;">
+                    <label>Confidence</label>
+                    <select id="event-confidence">
+                        <option value="high">High</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label>Review status</label>
+                    <select id="event-review-status">
+                        <option value="new">New</option>
+                        <option value="review-needed">Review needed</option>
+                        <option value="reviewed">Reviewed</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="disputed">Disputed</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Evidence note</label>
+                <textarea id="event-evidence-note" rows="2" placeholder="What exactly does the source establish, and what remains uncertain?"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Sources</label>
+                <div id="event-sources"></div>
+                <button type="button" class="secondary btn-sm" onclick="addEventSourceRow()">+ Add source</button>
             </div>
 
             <label style="margin-bottom: 4px; display: block;">Quickly insert a link in the description above:</label>

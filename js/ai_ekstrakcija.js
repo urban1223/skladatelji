@@ -113,11 +113,29 @@ function saveCheckedExtractedEvents() {
                 m.events.push({
                     id: Date.now() + i,
                     year: year,
+                    date: year ? { year, month: null, day: null } : null,
+                    endDate: null,
                     location: location,
                     text: text,
+                    sources: [],
+                    confidence: 'medium',
+                    reviewStatus: 'review-needed',
+                    evidenceNote: 'AI-extracted event; verify against a cited source before confirmation.',
                     vnesUID: window.trenutniUporabnikUID || null,
                     vnesIme: window.trenutniUporabnikIme || '',
-                    vnesPriimek: window.trenutniUporabnikPriimek || ''
+                    vnesPriimek: window.trenutniUporabnikPriimek || '',
+                    createdBy: window.trenutniUporabnikUID || null,
+                    createdByName: [window.trenutniUporabnikIme, window.trenutniUporabnikPriimek].filter(Boolean).join(' '),
+                    createdAt: new Date().toISOString(),
+                    updatedBy: window.trenutniUporabnikUID || null,
+                    updatedByName: [window.trenutniUporabnikIme, window.trenutniUporabnikPriimek].filter(Boolean).join(' '),
+                    updatedAt: new Date().toISOString(),
+                    auditTrail: [{
+                        changedAt: new Date().toISOString(),
+                        changedBy: window.trenutniUporabnikUID || null,
+                        changedByName: [window.trenutniUporabnikIme, window.trenutniUporabnikPriimek].filter(Boolean).join(' '),
+                        action: 'created'
+                    }]
                 });
                 importCount++;
             }
