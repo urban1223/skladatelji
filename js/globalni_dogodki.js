@@ -26,6 +26,7 @@ let editingGlobalEventId = null;
 
 // Save a global event to Firestore — with retry logic
 async function shraniGlobalniDogodekVFirestore(g) {
+    if (window.DEVELOPMENT_MODE) return;
     if (!window.db) { console.error("Firestore is not available."); return; }
 
     const maxRetries = 3;
@@ -49,6 +50,7 @@ async function shraniGlobalniDogodekVFirestore(g) {
 
 // Delete a global event from Firestore — with retry logic
 async function izbrisiGlobalniDogodekIzFirestore(id) {
+    if (window.DEVELOPMENT_MODE) return;
     if (!window.db) return;
 
     const maxRetries = 3;
@@ -134,6 +136,7 @@ function resetGlobalEventForm() {
 }
 
 function showAddGlobalEventForm() {
+    if (window.DEVELOPMENT_MODE) return;
     if (typeof hideAllViews === 'function') hideAllViews();
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
@@ -158,6 +161,7 @@ function showAddGlobalEventForm() {
 // (added before this field existed) are treated as editable by anyone, same
 // as the rest of the app's ownership checks.
 function editGlobalEvent(id) {
+    if (window.DEVELOPMENT_MODE) return;
     const g = globalEvents.find(item => item.id === id);
     if (!g) return;
     if (g.vnesUID !== window.trenutniUporabnikUID) {
@@ -227,6 +231,7 @@ function renderGlobalEventList() {
 }
 
 function saveNewGlobalEvent() {
+    if (window.DEVELOPMENT_MODE) return;
     const name = document.getElementById('ge-name').value.trim();
     const description = document.getElementById('ge-description').value.trim();
     const startYear = parseInt(document.getElementById('ge-start-year').value.trim(), 10);
@@ -283,6 +288,7 @@ function saveNewGlobalEvent() {
 }
 
 function deleteGlobalEvent(id) {
+    if (window.DEVELOPMENT_MODE) return;
     const g = globalEvents.find(item => item.id === id);
     if (g && g.vnesUID !== window.trenutniUporabnikUID) {
         alert("You can only delete historical events you added yourself.");

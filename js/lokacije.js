@@ -50,6 +50,7 @@ function _locDocId(key) {
 }
 
 async function _readLocationFromFirebase(key) {
+    if (window.DEVELOPMENT_MODE) return null;
     if (!window.db || !window.fsGetDoc || !window.fsDoc) return null;
     try {
         const snap = await window.fsGetDoc(window.fsDoc(window.db, LOCATIONS_COLLECTION, _locDocId(key)));
@@ -72,6 +73,7 @@ async function _readLocationFromFirebase(key) {
 }
 
 async function _writeLocationToFirebase(key, name, data) {
+    if (window.DEVELOPMENT_MODE) return;
     if (!window.db || !window.fsSetDoc || !window.fsDoc) return;
     try {
         await window.fsSetDoc(window.fsDoc(window.db, LOCATIONS_COLLECTION, _locDocId(key)), {

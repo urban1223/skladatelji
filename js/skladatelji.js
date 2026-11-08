@@ -1,9 +1,14 @@
+const DEVELOPMENT_MODE = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+window.DEVELOPMENT_MODE = DEVELOPMENT_MODE;
+
 /* ==========================================================================
    SHARED DATABASE (FIRESTORE) — musicians and events are now stored in the cloud,
    visible to all logged-in users.
    ========================================================================== */
 
-let musicians = [];
+let musicians = DEVELOPMENT_MODE && typeof initialComposerData !== 'undefined'
+    ? JSON.parse(JSON.stringify(initialComposerData))
+    : [];
 let currentMusicianId = null;
 let isEditingMusicianMode = false;
 
@@ -20,6 +25,7 @@ function escapeHtml(unsafe) {
 
 // Save a single musician (with all events) to Firestore — with retry logic
 async function shraniGlasbenikaVFirestore(m) {
+    if (DEVELOPMENT_MODE) return;
     if (!window.db) { console.error("Firestore is not available."); return; }
 
     const maxRetries = 3;
@@ -45,6 +51,7 @@ async function shraniGlasbenikaVFirestore(m) {
 
 // Delete musician from Firestore — with retry logic
 async function izbrisiGlasbenikaIzFirestore(id) {
+    if (DEVELOPMENT_MODE) return;
     if (!window.db) return;
 
     const maxRetries = 3;
@@ -120,6 +127,7 @@ function toggleProfileDropdown(event) {
 }
 
 function deleteMusician() {
+    if (DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
 
@@ -788,7 +796,9 @@ function renderTimeline(musician) {
 
         const jeLastnikDogodka = e.vnesUID === window.trenutniUporabnikUID;
         let akcijeHTML = '';
-        if (jeLastnikDogodka) {
+        if (DEVELOPMENT_MODE) {
+            akcijeHTML = '';
+        } else if (jeLastnikDogodka) {
             akcijeHTML = `
                 <div class="timeline-actions">
                     <button class="btn-action" onclick="showEventModal(true, ${e.id})" title="Edit">✏️</button>
@@ -827,6 +837,7 @@ function renderTimeline(musician) {
 }
 
 function preklopiOcenoDogodka(eventId, tipOcene) {
+    if (DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
     const ev = m.events.find(e => e.id === eventId);
@@ -922,6 +933,7 @@ function hideAllViews() {
 }
 
 function showAddMusicianForm() {
+    if (DEVELOPMENT_MODE) return;
     document.getElementById('placeholder-text').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
     const geForm = document.getElementById('add-global-event-form');
@@ -944,6 +956,7 @@ function showAddMusicianForm() {
 }
 
 function showEditMusicianForm() {
+    if (DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
     
@@ -959,6 +972,7 @@ function showEditMusicianForm() {
 }
 
 function saveNewMusician() {
+    if (DEVELOPMENT_MODE) return;
     const name = document.getElementById('new-name').value.trim();
     const birth = document.getElementById('new-birth').value.trim() || '?';
     const death = document.getElementById('new-death').value.trim() || '?';
@@ -998,6 +1012,7 @@ function saveNewMusician() {
 }
 
 function showEventModal(isEdit, eventId = null) { 
+    if (DEVELOPMENT_MODE) return;
     const journeyContainer = document.getElementById('composer-journey-container');
     if (journeyContainer) {
         journeyContainer.style.display = 'none';
@@ -1066,6 +1081,7 @@ function hideEventModal() {
 }
 
 function submitEventForm() {
+    if (DEVELOPMENT_MODE) return;
     const year = document.getElementById('event-year').value.trim();
     const location = document.getElementById('event-location').value.trim();
     const text = document.getElementById('event-text').value.trim();
@@ -1110,6 +1126,7 @@ function submitEventForm() {
 // documents, so a per-event server-side rule isn't possible without moving
 // events into a subcollection (a bigger migration, deliberately deferred).
 function deleteEvent(eventId) {
+    if (DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
     const ev = m.events.find(e => e.id === eventId);
@@ -1138,6 +1155,7 @@ function exportDatabase() {
 }
 
 function importDatabase(event) {
+    if (DEVELOPMENT_MODE) return;
     const file = event.target.files[0];
     if (!file) return;
 
@@ -1194,6 +1212,7 @@ function importDatabase(event) {
 }
 
 function mergeMusicianPrompt() {
+    if (DEVELOPMENT_MODE) return;
     const currentId = currentMusicianId; 
     const sourceMusician = musicians.find(m => m.id === currentId);
     
@@ -1228,6 +1247,7 @@ function mergeMusicianPrompt() {
 }
 
 function executeMusicianMerge() {
+    if (DEVELOPMENT_MODE) return;
     const sourceMusician = musicians.find(m => m.id === currentMusicianId);
     const targetSelect = document.getElementById('merge-target-select');
     const targetId = targetSelect.value;

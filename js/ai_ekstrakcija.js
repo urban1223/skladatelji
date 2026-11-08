@@ -94,6 +94,7 @@ function displayExtractedRows(events) {
 }
 
 function saveCheckedExtractedEvents() {
+    if (window.DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
     if (!m.events) m.events = [];

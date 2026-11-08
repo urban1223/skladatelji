@@ -1,0 +1,122 @@
+{
+  "generatedAt": "2026-11-08",
+  "selection": {
+    "target": "300-500",
+    "selectedCandidates": 420,
+    "newRecords": 410,
+    "period": "1580-1780",
+    "corePeriod": "1600-1750",
+    "allocation": {
+      "1580-1599": 20,
+      "1600-1609": 25,
+      "1610-1619": 25,
+      "1620-1629": 25,
+      "1630-1639": 25,
+      "1640-1649": 25,
+      "1650-1659": 25,
+      "1660-1669": 25,
+      "1670-1679": 25,
+      "1680-1689": 25,
+      "1690-1699": 25,
+      "1700-1709": 25,
+      "1710-1719": 25,
+      "1720-1729": 25,
+      "1730-1739": 25,
+      "1740-1749": 25,
+      "1750-1779": 25
+    },
+    "excludedNonEuropean": [
+      {
+        "qid": "Q2930824",
+        "name": "Francisco López Capillas",
+        "birthCountry": "Mexico"
+      },
+      {
+        "qid": "Q110745956",
+        "name": "Daniel Bayley the Elder",
+        "birthCountry": "United States"
+      }
+    ]
+  },
+  "sources": {
+    "wikidata": "Wikidata SPARQL and entity labels/aliases; QID stored per record",
+    "rism": "RISM Online JSON-LD authority records via Accept: application/ld+json; candidates from Wikidata P5504",
+    "viaf": "VIAF identifiers from Wikidata P214; compared with RISM external-authority links when present"
+  },
+  "coverage": {
+    "withRismId": 410,
+    "withViafId": 410,
+    "withBirthPlace": 406,
+    "withDeathPlace": 378,
+    "withAlternativeNames": 180,
+    "withTimelineEvents": 410,
+    "femaleRecords": 68,
+    "rismVerified": 410,
+    "rismSourceRelationsTotal": 90419,
+    "rismRecordsWithSourceRelations": 403,
+    "rismSourceRelationsMissingCount": 0,
+    "withBirthCountry": 407,
+    "withDeathCountry": 379,
+    "birthCountryCounts": {
+      "Italy": 101,
+      "Spain": 21,
+      "Germany": 117,
+      "United Kingdom": 16,
+      "Portugal": 3,
+      "Austria": 23,
+      "France": 49,
+      "Poland": 16,
+      "Belgium": 10,
+      "Czech Republic": 29,
+      "Latvia": 1,
+      "Switzerland": 6,
+      "Netherlands": 7,
+      "Sweden": 3,
+      "Slovenia": 1,
+      "Denmark": 1,
+      "Malta": 1,
+      "Slovakia": 1,
+      "Hungary": 1
+    },
+    "maleRecords": 342
+  },
+  "duplicatesExcluded": [
+    {
+      "qid": "Q2930824",
+      "name": "Francisco López Capillas",
+      "reason": "non-European birth country excluded"
+    },
+    {
+      "qid": "Q110745956",
+      "name": "Daniel Bayley the Elder",
+      "reason": "non-European birth country excluded"
+    }
+  ],
+  "missingIdentifierCount": {
+    "rismId": 0,
+    "viafId": 0
+  },
+  "compatibility": {
+    "compatibleWithExistingFields": [
+      "id",
+      "name",
+      "birth",
+      "death",
+      "img",
+      "events"
+    ],
+    "additionalFieldsIgnoredByCurrentUI": [
+      "alternativeNames",
+      "wikidataQid",
+      "rismId",
+      "viafId",
+      "birthPlace",
+      "deathPlace",
+      "sources",
+      "dataQuality",
+      "gender"
+    ],
+    "eventsShape": "Each event has id, year, location, text; source and confidence are additive.",
+    "productionImport": "Not performed"
+  }
+}

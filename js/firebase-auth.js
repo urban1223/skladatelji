@@ -167,6 +167,7 @@ window.handleLogout = async function() {
 };
 
 window.toggleSettingsModal = function(show) {
+    if (window.DEVELOPMENT_MODE) return;
     const modal = document.getElementById('settings-modal');
     if (modal) {
         modal.style.display = show ? 'flex' : 'none';
@@ -176,6 +177,7 @@ window.toggleSettingsModal = function(show) {
 
 window.saveUserProfile = async function(event) {
     event.preventDefault();
+    if (window.DEVELOPMENT_MODE) return;
     if (!trenutniUporabnikUID) return;
 
     const profilniPodatki = {
@@ -295,6 +297,28 @@ function prikaziZaslonPotrditve(user) {
     };
 }
 
+async function initializeDevelopmentMode() {
+    const authScreen = document.getElementById('auth-screen');
+    const sidebarProfileZone = document.querySelector('.sidebar-profile-zone');
+    const appLoading = document.getElementById('app-loading');
+
+    if (appLoading) appLoading.remove();
+    if (authScreen) authScreen.style.setProperty('display', 'none', 'important');
+    if (sidebarProfileZone) sidebarProfileZone.style.setProperty('display', 'none', 'important');
+    document.getElementById('btn-add-musician')?.remove();
+    document.getElementById('btn-add-global-event')?.remove();
+    document.getElementById('add-event-btn')?.remove();
+    document.getElementById('profile-settings-container')?.style.setProperty('display', 'none', 'important');
+    window.trenutniUporabnikUID = null;
+    window.trenutniUporabnikEmail = null;
+    window.trenutniUporabnikIme = null;
+    window.trenutniUporabnikPriimek = null;
+    console.info('Composer Timelines: local development mode enabled; Firebase writes disabled.');
+}
+
+if (window.DEVELOPMENT_MODE) {
+    initializeDevelopmentMode();
+} else {
 onAuthStateChanged(auth, async (user) => {
     const authScreen = document.getElementById('auth-screen');
     const sidebarProfileZone = document.querySelector('.sidebar-profile-zone');
@@ -407,3 +431,4 @@ onAuthStateChanged(auth, async (user) => {
         window.updateSidebarProfile(null);
     }
 });
+}
