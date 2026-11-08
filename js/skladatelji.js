@@ -12,6 +12,29 @@ let musicians = DEVELOPMENT_MODE && typeof initialComposerData !== 'undefined'
 let currentMusicianId = null;
 let isEditingMusicianMode = false;
 
+function zdruziSkladatelje(skladatelji) {
+    const obstojece = new Map(musicians.map(m => [m.id, m]));
+    skladatelji.forEach(m => {
+        if (!obstojece.has(m.id)) obstojece.set(m.id, m);
+    });
+    musicians = [...obstojece.values()];
+}
+
+async function naloziStatisniKatalog() {
+    try {
+        const response = await fetch('./catalog/composer-catalog.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Catalog request failed with HTTP ${response.status}`);
+        const catalog = await response.json();
+        zdruziSkladatelje(catalog.map(m => ({ ...m, staticCatalog: true })));
+        if (typeof searchMusicians === 'function') searchMusicians();
+        if (typeof updateLocationLists === 'function') updateLocationLists();
+        if (typeof updateLinkDropdowns === 'function') updateLinkDropdowns();
+    } catch (error) {
+        console.error("Error loading the static composer catalog:", error);
+    }
+}
+window.naloziStatisniKatalog = naloziStatisniKatalog;
+
 // HTML escape to prevent XSS attacks
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
@@ -87,6 +110,7 @@ async function naloziGlasbenikeIzFirestore() {
             const snapshot = await window.fsGetDocs(window.fsCollection(window.db, 'musicians'));
             musicians = [];
             snapshot.forEach(d => musicians.push(d.data()));
+            await naloziStatisniKatalog();
             if (typeof searchMusicians === 'function') searchMusicians();
             if (typeof updateLocationLists === 'function') updateLocationLists();
             if (typeof updateLinkDropdowns === 'function') updateLinkDropdowns();
@@ -130,6 +154,7 @@ function deleteMusician() {
     if (DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
+    if (m.staticCatalog) return;
 
     if (m.vnesUID !== window.trenutniUporabnikUID) {
         alert("You can only delete people you added yourself.");
@@ -796,7 +821,7 @@ function renderTimeline(musician) {
 
         const jeLastnikDogodka = e.vnesUID === window.trenutniUporabnikUID;
         let akcijeHTML = '';
-        if (DEVELOPMENT_MODE) {
+        if (DEVELOPMENT_MODE || musician.staticCatalog) {
             akcijeHTML = '';
         } else if (jeLastnikDogodka) {
             akcijeHTML = `
@@ -840,6 +865,7 @@ function preklopiOcenoDogodka(eventId, tipOcene) {
     if (DEVELOPMENT_MODE) return;
     const m = musicians.find(item => item.id === currentMusicianId);
     if (!m) return;
+    if (m.staticCatalog) return;
     const ev = m.events.find(e => e.id === eventId);
     if (!ev) return;
 

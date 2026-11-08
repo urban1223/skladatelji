@@ -313,6 +313,9 @@ async function initializeDevelopmentMode() {
     window.trenutniUporabnikEmail = null;
     window.trenutniUporabnikIme = null;
     window.trenutniUporabnikPriimek = null;
+    if (typeof window.naloziStatisniKatalog === 'function') {
+        window.naloziStatisniKatalog();
+    }
     console.info('Composer Timelines: local development mode enabled; Firebase writes disabled.');
 }
 
