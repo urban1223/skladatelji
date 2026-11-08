@@ -116,7 +116,7 @@
       "dataQuality",
       "gender"
     ],
-    "eventsShape": "Each event has id, year, location, text; source and confidence are additive.",
+    "eventsShape": "Each event has id, year, date (year/month/day; null means the source only establishes a year), location, text, source, and confidence.",
     "productionImport": "Not performed"
   }
 }
